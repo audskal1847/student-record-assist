@@ -35,7 +35,7 @@ def find_model(api_key):
             if all(k in m for k in keys): return m
     return models[0] if models else None
 
-# ===== 3. [신규] 구체적 숫자 자동 치환 =====
+# ===== 3. 구체적 숫자 자동 치환 =====
 def remove_numbers(text):
     """검증되지 않은 활동 관련 숫자를 자연스러운 정성적 표현으로 치환"""
     
@@ -124,7 +124,7 @@ def clean(text, subject=""):
     text = re.sub(r'[\r\n]+', ' ', text)
     text = re.sub(r'  +', ' ', text)
     text = re.sub(r'^[은는이가을를에]\s+', '', text.strip())
-    # ⭐ [신규] 숫자 제거 (가장 마지막에 적용)
+    # 숫자 제거
     text = remove_numbers(text)
     return text.strip()
 
@@ -152,11 +152,12 @@ with st.sidebar:
 # ===== 6. 메인 화면 =====
 st.title("📝 학생부 입력 어시스트")
 st.caption("키워드와 진로를 입력하면, 학생별 맞춤형 학생부 문장을 AI가 생성합니다.")
+st.caption("만든이: 신선여자고등학교 김명남")
 
 c1, c2 = st.columns(2)
 with c1:
     st.subheader("1. 학생 활동 입력")
-    subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 여행지리")
+    subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 세계시민과 지리")
     project_title = st.text_input("🎯 프로젝트 정식 명칭", placeholder="예: 커뮤니티 매핑을 통한 우리 동네 새로 고침 지도 만들기")
     aspiration = st.text_input("🎓 진학 희망 학과/계열 ⭐", placeholder="예: 도시공학과 / 사회학과")
     if df_guide is not None:
@@ -336,7 +337,7 @@ if submit:
                 c_d.metric("⚠️ 상태", "초과")
                 st.error("⚠️ 한도 초과! 다시 생성을 권장합니다.")
             
-            # ⭐ 숫자 잔존 확인 (수치 단위가 남아있는지 검증)
+            # 숫자 잔존 확인
             remaining_numbers = re.findall(r'\d+\s*(?:명|곳|장|편|권|회|개|건|종|차례|번|점포|군데|가지|시간)', result)
             if remaining_numbers:
                 st.warning(f"⚠️ 일부 수치 표현이 남아있을 수 있음: {', '.join(remaining_numbers[:5])} - 확인 후 수정해 주세요.")
