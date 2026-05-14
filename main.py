@@ -354,6 +354,6 @@ st.markdown("""
 <div style='text-align: center; color: gray; padding: 20px; font-size: 13px;'>
     📝 학생부 입력 어시스트 v3.0<br>
     만든이: <b>신선여자고등학교 김명남</b><br>
-    🗓️ 2026년 5월 제작
+    🗓️ 2026.05
 </div>
 """, unsafe_allow_html=True)
