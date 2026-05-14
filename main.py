@@ -148,11 +148,19 @@ with st.sidebar:
     st.divider()
     st.info("🎯 목표: 1420~1470 바이트")
     st.caption("🔢 구체적 숫자 자동 제거")
+        st.divider()
+    st.markdown("""
+    ---
+    **👨‍🏫 제작**  
+    신선여자고등학교 김명남
+    🗓️ 최종 업데이트: 2026.05
+    """)
+
 
 # ===== 6. 메인 화면 =====
 st.title("📝 학생부 입력 어시스트")
 st.caption("키워드와 진로를 입력하면, 학생별 맞춤형 학생부 문장을 AI가 생성합니다.")
-st.caption("만든이: 신선여자고등학교 김명남")
+
 
 c1, c2 = st.columns(2)
 with c1:
