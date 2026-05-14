@@ -166,7 +166,7 @@ with c1:
         focus = st.selectbox("🎯 강조 역량", options)
     else:
         focus = "AI에게 알아서 맡기기"
-    raw_text = st.text_area("✍️ 학생 활동 키워드", height=180, placeholder="예시)\n- 세계 도시 mbti 조사\n- 인문과학 콘서트\n- 디지털 지도 제작\n- 수학 과학 체험전\n- 주제탐구 보고서 작성\n- 교과 융합 프로젝트 활동 ")
+    raw_text = st.text_area("✍️ 학생 활동 핵심 키워드 및 내용", height=180, placeholder="예시)\n- 세계 도시 mbti 조사\n- 인문과학 콘서트\n- 디지털 지도 제작\n- 수학 과학 체험전\n- 주제탐구 보고서 작성\n- 교과 융합 프로젝트 활동 ")
 
 with c2:
     st.subheader("2. 추가 반영사항")
