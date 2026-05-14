@@ -352,9 +352,9 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #333333; padding: 20px; font-size: 17px; font-weight: bold;'>
-    🏫 학교생활기록부 입력 어시스트 시스템 v3.0<br>
+    🏫 학생부 입력 어시스트 시스템 v3.0<br>
     만든이: 신선여자고등학교 김명남<br>
-    🗓️ 2026.03
+    🗓️ 2026.03.
 </div>
 """, unsafe_allow_html=True)
 
