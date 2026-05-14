@@ -148,24 +148,20 @@ with st.sidebar:
     st.divider()
     st.info("🎯 목표: 1420~1470 바이트")
     st.caption("🔢 구체적 숫자 자동 제거")
-        st.divider()
+    st.divider()
     st.markdown("""
-    ---
-    **👨‍🏫 제작**  
+    **👨‍🏫 만든이**  
     신선여자고등학교 김명남
-    🗓️ 최종 업데이트: 2026.05
     """)
-
 
 # ===== 6. 메인 화면 =====
 st.title("📝 학생부 입력 어시스트")
 st.caption("키워드와 진로를 입력하면, 학생별 맞춤형 학생부 문장을 AI가 생성합니다.")
 
-
 c1, c2 = st.columns(2)
 with c1:
     st.subheader("1. 학생 활동 입력")
-    subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 세계시민과 지리")
+    subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 여행지리")
     project_title = st.text_input("🎯 프로젝트 정식 명칭", placeholder="예: 커뮤니티 매핑을 통한 우리 동네 새로 고침 지도 만들기")
     aspiration = st.text_input("🎓 진학 희망 학과/계열 ⭐", placeholder="예: 도시공학과 / 사회학과")
     if df_guide is not None:
@@ -355,3 +351,13 @@ if submit:
         except Exception as e:
             box.error(f"오류: {e}")
             st.info("💡 1~2분 후 재시도 또는 새 API 키 발급")
+
+# ===== 푸터(만든이 정보) =====
+st.divider()
+st.markdown("""
+<div style='text-align: center; color: gray; padding: 20px; font-size: 13px;'>
+    📝 학생부 입력 어시스트 v1.0<br>
+    만든이: <b>신선여자고등학교 김명남</b><br>
+    🗓️ 2026년 5월 제작
+</div>
+""", unsafe_allow_html=True)
