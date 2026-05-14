@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import PyPDF2, pandas as pd, glob, os, re
 
-st.set_page_config(page_title="학생부 입력 어시스트", layout="wide")
+st.set_page_config(page_title="개별화된 학생부 입력을 위한 어시스트", layout="wide")
 
 # ===== 1. 데이터 로딩 =====
 @st.cache_data(show_spinner=False)
@@ -152,7 +152,7 @@ with st.sidebar:
 
 # ===== 6. 메인 화면 =====
 st.title("📝 학생부 입력 어시스트")
-st.caption("키워드와 진로를 입력하면, 학생별 맞춤형 학생부 문장을 AI가 생성합니다.")
+st.caption("학생을 설명할 수 있는 핵심 키워드와 희망 진로를 입력하면, 학생별 맞춤형 학생부 기록이 생성됩니다.")
 
 c1, c2 = st.columns(2)
 with c1:
