@@ -158,7 +158,7 @@ c1, c2 = st.columns(2)
 with c1:
     st.subheader("1. 학생 활동 입력")
     subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 세계시민과 지리, 물리학1, 영어독해와 작문, 미적분")
-    project_title = st.text_input("🎯 프로젝트 정식 명칭", placeholder="예: 커뮤니티 매핑을 통한 우리 동네 새로 고침 지도 만들기")
+    project_title = st.text_input("🎯 구체적인 활동명", placeholder="예: 커뮤니티 매핑을 통한 우리 동네 새로 고침 지도 만들기")
     aspiration = st.text_input("🎓 진학 희망 학과/계열 ⭐", placeholder="예: 도시공학과 / 사회학과 / 전자공학과/ 기계공학과")
     if df_guide is not None:
         col0 = df_guide.columns[0]
@@ -169,10 +169,10 @@ with c1:
     raw_text = st.text_area("✍️ 학생 활동 키워드", height=180, placeholder="예시)\n- 세계 도시 mbti 조사\n- 인문과학 콘서트\n- 디지털 지도 제작\n- 수학 과학 체험전\n- 주제탐구 보고서 작성\n- 교과 융합 프로젝트 활동 ")
 
 with c2:
-    st.subheader("2. 추가 지시사항")
-    extra = st.text_area("🔍 강조 포인트", height=180, placeholder="예: 탐구력과 자기주도성 강조")
+    st.subheader("2. 추가 반영사항")
+    extra = st.text_area("🔍 개별화를 위한 추가 강조 포인트", height=180, placeholder="예: 탐구력과 자기주도성 강조, 창의력과 문제해결력 강조")
     st.write("")
-    submit = st.button("🚀 맞춤형 문장 생성", type="primary", use_container_width=True)
+    submit = st.button("🚀 학생 맞춤형 개별 문장 생성", type="primary", use_container_width=True)
 
 st.divider()
 
