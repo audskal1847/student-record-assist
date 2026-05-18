@@ -29,7 +29,7 @@ def find_model(api_key):
     genai.configure(api_key=api_key)
     models = [m.name.replace("models/", "") for m in genai.list_models() 
               if 'generateContent' in m.supported_generation_methods]
-    for keys in [("2.5","flash","lite"), ("2.0","flash","lite"), ("2.0","flash"), ("1.5","flash","8b"), ("1.5","flash"), ("2.5","flash"), ("flash",), ("pro",)]:
+    for keys in [("1.5","flash","8b"), ("1.5","flash"), ("2.5","flash"), ("2.0","flash"), ("flash",), ("pro",)]:
         for m in models:
             if any(s in m for s in ["vision","embedding","exp","thinking","tts","image"]): continue
             if all(k in m for k in keys): return m
