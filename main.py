@@ -1,184 +1,359 @@
 import streamlit as st
-import pandas as pd
 import google.generativeai as genai
+import PyPDF2, pandas as pd, glob, os, re
 
-# 1. 페이지 설정 (넓은 화면 사용)
-st.set_page_config(page_title="학생부 입력 어시스트", layout="wide")
+st.set_page_config(page_title="개별화된 학생부 입력을 위한 어시스트", layout="wide")
 
-# 2. 사이드바 구성
+# ===== 1. 데이터 로딩 =====
+@st.cache_data(show_spinner=False)
+def load_pdfs(pdfs):
+    text = ""
+    for p in pdfs:
+        with open(p, "rb") as f:
+            for page in PyPDF2.PdfReader(f).pages:
+                t = page.extract_text()
+                if t: text += t + "\n"
+    return text
+
+@st.cache_data(show_spinner=False)
+def load_excel():
+    if not os.path.exists("data.xlsx"): return None, None
+    try:
+        g = pd.read_excel("data.xlsx", sheet_name="가이드북 항목별 주요 내용")
+        v = pd.read_excel("data.xlsx", sheet_name="권장 연결 동사")
+        return g, v
+    except: return None, None
+
+# ===== 2. AI 모델 자동 탐색 =====
+def find_model(api_key):
+    genai.configure(api_key=api_key)
+    models = [m.name.replace("models/", "") for m in genai.list_models() 
+              if 'generateContent' in m.supported_generation_methods]
+    for keys in [("1.5","flash","8b"), ("1.5","flash"), ("2.5","flash"), ("2.0","flash"), ("flash",), ("pro",)]:
+        for m in models:
+            if any(s in m for s in ["vision","embedding","exp","thinking","tts","image"]): continue
+            if all(k in m for k in keys): return m
+    return models[0] if models else None
+
+# ===== 3. 구체적 숫자 자동 치환 =====
+def remove_numbers(text):
+    """검증되지 않은 활동 관련 숫자를 자연스러운 정성적 표현으로 치환"""
+    
+    # "약 N", "N여" 같은 어림 표현 먼저 처리
+    text = re.sub(r'약\s*\d+\s*여?\s*명의?', '여러 명의', text)
+    text = re.sub(r'약\s*\d+\s*여?\s*곳을?', '여러 곳을', text)
+    text = re.sub(r'약\s*\d+\s*여?\s*개의?', '여러', text)
+    text = re.sub(r'\d+\s*여\s*명', '여러 명', text)
+    text = re.sub(r'\d+\s*여\s*곳', '여러 곳', text)
+    text = re.sub(r'\d+\s*여\s*개', '여러 개', text)
+    text = re.sub(r'\d+\s*여\s*편', '여러 편', text)
+    text = re.sub(r'\d+\s*여\s*권', '여러 권', text)
+    text = re.sub(r'\d+\s*여\s*건', '여러 건', text)
+    
+    # 사람 단위
+    text = re.sub(r'\d+\s*명의', '여러 명의', text)
+    text = re.sub(r'\d+\s*명과', '여러 명과', text)
+    text = re.sub(r'\d+\s*명을', '여러 명을', text)
+    text = re.sub(r'\d+\s*명에게', '여러 명에게', text)
+    text = re.sub(r'\d+\s*명', '여러 명', text)
+    
+    # 장소 단위
+    text = re.sub(r'\d+\s*곳을', '여러 곳을', text)
+    text = re.sub(r'\d+\s*곳의', '여러 곳의', text)
+    text = re.sub(r'\d+\s*곳에', '여러 곳에', text)
+    text = re.sub(r'\d+\s*곳', '여러 곳', text)
+    text = re.sub(r'\d+\s*군데', '여러 군데', text)
+    text = re.sub(r'\d+\s*점포', '여러 점포', text)
+    text = re.sub(r'\d+\s*개\s*점포', '여러 점포', text)
+    
+    # 자료/물건 단위
+    text = re.sub(r'\d+\s*장의', '다수의', text)
+    text = re.sub(r'\d+\s*장을', '다수의 사진을', text)
+    text = re.sub(r'\d+\s*장', '다수', text)
+    text = re.sub(r'\d+\s*편의', '여러 편의', text)
+    text = re.sub(r'\d+\s*편을', '여러 편을', text)
+    text = re.sub(r'\d+\s*편', '여러 편', text)
+    text = re.sub(r'\d+\s*권의', '여러 권의', text)
+    text = re.sub(r'\d+\s*권을', '여러 권을', text)
+    text = re.sub(r'\d+\s*권', '여러 권', text)
+    text = re.sub(r'\d+\s*건의', '여러 건의', text)
+    text = re.sub(r'\d+\s*건을', '여러 건을', text)
+    text = re.sub(r'\d+\s*건', '여러 건', text)
+    text = re.sub(r'\d+\s*종의', '여러 종류의', text)
+    text = re.sub(r'\d+\s*종', '여러 종류', text)
+    text = re.sub(r'\d+\s*개의', '여러', text)
+    text = re.sub(r'\d+\s*개를', '여러 개를', text)
+    text = re.sub(r'\d+\s*개', '여러 개', text)
+    text = re.sub(r'\d+\s*가지의?', '여러 가지', text)
+    
+    # 횟수 단위
+    text = re.sub(r'\d+\s*회의?', '수차례', text)
+    text = re.sub(r'\d+\s*차례', '수차례', text)
+    text = re.sub(r'\d+\s*번의?', '여러 번', text)
+    
+    # SNS/온라인 단위
+    text = re.sub(r'\d+\s*개의?\s*게시물', '여러 게시물', text)
+    text = re.sub(r'\d+\s*건의?\s*게시물', '여러 게시물', text)
+    
+    # 어림 표현 정리
+    text = re.sub(r'약\s+여러', '여러', text)
+    text = re.sub(r'약\s+다수', '다수', text)
+    text = re.sub(r'약\s+수차례', '수차례', text)
+    
+    # 남은 어색한 패턴 정리
+    text = re.sub(r'  +', ' ', text)
+    text = re.sub(r'\s+,', ',', text)
+    text = re.sub(r'\s+\.', '.', text)
+    
+    return text
+
+# ===== 4. 결과 정화 =====
+def clean(text, subject=""):
+    # 마크다운 제거
+    for pat in [r'\*\*(.*?)\*\*', r'\*(.*?)\*', r'__(.*?)__', r'`(.*?)`']:
+        text = re.sub(pat, r'\1', text)
+    text = re.sub(r'^#+\s*|^[\-\*\+]\s+', '', text, flags=re.MULTILINE)
+    # 과목명 제거
+    if subject:
+        for pat in [f"{subject} 수업을 통해", f"{subject} 시간에", f"{subject}에서", f"{subject} 교과", subject]:
+            text = re.sub(pat + r'\s*,?\s*', '', text)
+    # '학생은/이' 제거
+    for pat in [r'본\s*학생[은이]\s*', r'해당\s*학생[은이]\s*', r'이\s*학생[은이]\s*', r'학생[은이을]\s*', r'학생에게\s*']:
+        text = re.sub(pat, '', text)
+    # 줄바꿈 → 공백
+    text = re.sub(r'[\r\n]+', ' ', text)
+    text = re.sub(r'  +', ' ', text)
+    text = re.sub(r'^[은는이가을를에]\s+', '', text.strip())
+    # 숫자 제거
+    text = remove_numbers(text)
+    return text.strip()
+
+def byte_count(text):
+    return len(text.encode('utf-8'))
+
+# ===== 5. 사이드바 =====
 with st.sidebar:
     st.header("🔑 기본 설정")
     api_key = st.text_input("Google AI API 키", type="password")
-    st.markdown("[🔗 무료 API 키 발급](https://aistudio.google.com/)")
+    st.markdown("[🔗 무료 API 키 발급](https://aistudio.google.com/app/apikey)")
+    st.divider()
+    df_guide, df_verbs = load_excel()
+    if df_guide is not None:
+        st.success(f"✅ 엑셀 사전 로드 (표현 {len(df_guide)}개 / 동사 {len(df_verbs)}개)")
+    else:
+        st.error("❌ data.xlsx 없음")
+    pdf_files = glob.glob("*.pdf")
+    if pdf_files:
+        st.success(f"✅ PDF 가이드북 {len(pdf_files)}개 로드")
+    st.divider()
+    st.info("🎯 목표: 1420~1470 바이트")
+    st.caption("🔢 구체적 숫자 자동 제거")
     
-    st.markdown("---")
-    
-    load_excel = st.checkbox("✅ 엑셀 사전 로드 (표현 90개 / 동사 10개)", value=True)
-    load_pdf = st.checkbox("✅ PDF 가이드북 1개 로드", value=True)
-    
-    # 텍스트 취소선 오류 수정을 위해 하이픈(-) 적용
-    st.info("🎯 목표: 1420 - 1470 바이트 (약 450 - 500자)")
-    remove_numbers = st.checkbox("🔢 구체적 숫자 자동 제거")
-    
-    st.markdown("---")
-    st.markdown("### 📥 자료실 및 관련 링크")
-    # 요청하신 명칭으로 깔끔하게 수정
-    st.link_button("📖 교과 선택 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
-    st.link_button("📖 교과 선택 가이드북(2025)", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
-    st.link_button("📖 계열별 학과 안내", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
-    st.link_button("📄 선택과목 안내서 보러가기", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
 
-# 3. 메인 화면 타이틀
+# ===== 6. 메인 화면 =====
 st.title("📝 학생부 입력 어시스트")
 st.caption("학생을 설명할 수 있는 핵심 키워드와 희망 진로를 입력하면, 학생별 맞춤형 학생부 기록이 생성됩니다.")
 
-# ==========================================
-# 4. 레이아웃 재구성 (세로 스크롤 최소화)
-# ==========================================
-
-# [섹션 1] 기본 정보 (가로 3단)
-st.markdown("#### 1. 학생 기본 정보")
-col_b1, col_b2, col_b3 = st.columns(3)
-with col_b1:
-    subject_name = st.text_input("📖 과목/활동 영역", placeholder="예: 세계시민과 지리, 물리학1")
-with col_b2:
-    major_name = st.text_input("🎓 진학 희망 학과/계열", placeholder="예: 도시공학과 / 사회학과")
-with col_b3:
-    selected_competency = st.selectbox("🎯 강조 역량", ["AI에게 알아서 맡기기", "학업 역량", "진로 역량", "공동체 역량"])
-
-st.markdown("---")
-
-# [섹션 2] 구체적인 활동 입력 (가로 2단)
-st.markdown("#### 2. 구체적인 활동 및 상세 내용 (최대 4개)")
-st.caption("진행한 활동의 개수만큼 입력하세요. 2단 구성으로 스크롤을 최소화했습니다.")
-
-col_act1, col_act2 = st.columns(2)
-
-with col_act1:
-    st.markdown("**🔹 활동 1 (필수)**")
-    activity_1_name = st.text_input("활동명 1", placeholder="예: 커뮤니티 매핑 지도 만들기", label_visibility="collapsed")
-    activity_1_desc = st.text_area("활동 1 상세 내용", placeholder="위 활동에 대한 학생의 구체적인 역할, 배우고 느낀 점, 성취 등을 자세히 적어주세요.", height=100)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    st.markdown("**🔹 활동 3 (선택)**")
-    activity_3_name = st.text_input("활동명 3", placeholder="예: 기후 변화 대응 캠페인", label_visibility="collapsed")
-    activity_3_desc = st.text_area("활동 3 상세 내용", placeholder="위 활동에 대한 상세 내용 입력", height=100)
-
-with col_act2:
-    st.markdown("**🔹 활동 2 (선택)**")
-    activity_2_name = st.text_input("활동명 2", placeholder="예: 지속가능한 도시 개발 보고서 작성", label_visibility="collapsed")
-    activity_2_desc = st.text_area("활동 2 상세 내용", placeholder="위 활동에 대한 상세 내용 입력", height=100)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    st.markdown("**🔹 활동 4 (선택)**")
-    activity_4_name = st.text_input("활동명 4", placeholder="", label_visibility="collapsed")
-    activity_4_desc = st.text_area("활동 4 상세 내용", placeholder="위 활동에 대한 상세 내용 입력", height=100)
-
-st.markdown("---")
-
-# [섹션 3] 추가 반영사항 및 교과 키워드 (가로 2단)
-st.markdown("#### 3. 추가 반영사항 및 핵심 키워드")
-col_add1, col_add2 = st.columns(2)
-
-with col_add1:
-    st.markdown("**🧠 교과 핵심 아이디어 및 내용 요소**")
-    st.caption("해당 교과에서 강조하고 싶은 키워드를 입력하세요. (선택과목 안내서 참고)")
-    subject_keywords = st.text_area(
-        "핵심 아이디어 입력", 
-        placeholder="예: [물리학] 역학적 에너지 보존 / 학생의 진로(건축)와 연결하여 '힘과 평형' 개념 강조",
-        height=100,
-        label_visibility="collapsed"
-    )
-
-with col_add2:
-    st.markdown("**🔍 개별화를 위한 추가 강조 포인트**")
-    st.caption("AI가 특별히 신경 써야 할 학생만의 강점을 적어주세요.")
-    extra_info = st.text_area(
-        "강조 포인트 입력",
-        placeholder="예: 탐구력과 자기주도성 강조, 창의력과 문제해결력 강조",
-        height=100,
-        label_visibility="collapsed"
-    )
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# ==========================================
-# 5. 분석 시작 및 AI 연동
-# ==========================================
-if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", use_container_width=True):
-    
-    # 활동 수합 로직
-    activities_data = []
-    if activity_1_name.strip() and activity_1_desc.strip():
-        activities_data.append(f"[활동 1: {activity_1_name.strip()}]\n- 상세 내용: {activity_1_desc.strip()}")
-    if activity_2_name.strip() and activity_2_desc.strip():
-        activities_data.append(f"[활동 2: {activity_2_name.strip()}]\n- 상세 내용: {activity_2_desc.strip()}")
-    if activity_3_name.strip() and activity_3_desc.strip():
-        activities_data.append(f"[활동 3: {activity_3_name.strip()}]\n- 상세 내용: {activity_3_desc.strip()}")
-    if activity_4_name.strip() and activity_4_desc.strip():
-        activities_data.append(f"[활동 4: {activity_4_name.strip()}]\n- 상세 내용: {activity_4_desc.strip()}")
-        
-    num_activities = len(activities_data)
-    activities_str = "\n\n".join(activities_data)
-    
-    if not api_key:
-        st.error("왼쪽 사이드바에서 API 키를 먼저 입력해 주세요!")
-    elif num_activities == 0:
-        st.warning("최소 1개 이상의 구체적인 활동명과 상세 내용을 모두 입력해 주세요! (활동 1 필수)")
+c1, c2 = st.columns(2)
+with c1:
+    st.subheader("1. 학생 활동 입력")
+    subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 세계시민과 지리, 물리학1, 영어독해와 작문, 미적분")
+    project_title = st.text_input("🎯 구체적인 활동명", placeholder="예: 커뮤니티 매핑을 통한 우리 동네 새로 고침 지도 만들기")
+    aspiration = st.text_input("🎓 진학 희망 학과/계열 ⭐", placeholder="예: 도시공학과 / 사회학과 / 전자공학과/ 기계공학과")
+    if df_guide is not None:
+        col0 = df_guide.columns[0]
+        options = ["AI에게 알아서 맡기기"] + df_guide[col0].dropna().unique().tolist()
+        focus = st.selectbox("🎯 강조 역량", options)
     else:
-        with st.spinner(f"총 {num_activities}개의 활동을 분석하여 맞춤형 분량으로 문장을 생성 중입니다..."):
-            try:
-                guide_expressions = ""
-                verb_expressions = ""
+        focus = "AI에게 알아서 맡기기"
+    raw_text = st.text_area("✍️ 학생 활동 핵심 키워드 및 내용", height=180, placeholder="예시)\n- 세계 도시 mbti 조사\n- 인문과학 콘서트\n- 디지털 지도 제작\n- 수학 과학 체험전\n- 주제탐구 보고서 작성\n- 교과 융합 프로젝트 활동 ")
+
+with c2:
+    st.subheader("2. 추가 반영사항")
+    extra = st.text_area("🔍 개별화를 위한 추가 강조 포인트", height=180, placeholder="예: 탐구력과 자기주도성 강조, 창의력과 문제해결력 강조")
+    st.write("")
+    submit = st.button("🚀 학생 맞춤형 개별 문장 생성", type="primary", use_container_width=True)
+
+st.divider()
+
+# ===== 7. 생성 로직 =====
+if submit:
+    if not api_key: st.error("API 키를 입력해 주세요!")
+    elif not raw_text: st.warning("학생 활동 키워드를 입력해 주세요!")
+    elif df_guide is None: st.error("data.xlsx 파일이 필요합니다!")
+    else:
+        box = st.empty()
+        try:
+            box.info("🔍 AI 모델 탐색 중...")
+            model_name = find_model(api_key)
+            if not model_name: raise Exception("사용 가능한 모델 없음")
+            model = genai.GenerativeModel(model_name)
+            
+            # 자료 준비
+            col0 = df_guide.columns[0]
+            guide = df_guide[df_guide[col0] == focus].to_string(index=False) if focus != "AI에게 알아서 맡기기" else df_guide.to_string(index=False)
+            verbs = df_verbs.to_string(index=False) if df_verbs is not None else ""
+            pdf_text = load_pdfs(pdf_files)[:3000] if pdf_files else ""
+            
+            # 목표 바이트
+            target_byte, target_min, target_max = 1445, 1420, 1470
+            target_chars = 481
+            
+            project_part = f"\n🎯 모든 활동은 '{project_title}' 프로젝트의 일환임. 본문 첫 문장에서 작은따옴표('')로 감싸 프로젝트명을 명시. 이후 '해당 프로젝트', '본 활동' 등으로 호명." if project_title.strip() else ""
+            
+            aspiration_part = f"""
+🎓 진학 희망: '{aspiration}'
+- 이 학과·계열 관점에서 활동을 재해석하여 강조
+- 결말부 약 15%를 '{aspiration}' 관련 학문적 호기심·후속 탐구 의지로 자연스럽게 마무리
+- ❌ "○○학과 진학 희망" 같은 직접 선언 금지!
+- ✅ "○○ 분야에 대한 관심을 심화함" 등 우회 표현 사용
+""" if aspiration.strip() else ""
+            
+            prompt = f"""당신은 20년 경력의 베테랑 학생부 작성 교사입니다. 학생 활동 키워드를 바탕으로 풍성한 학생부 문장을 작성해 주세요.
+
+🚨 [필수 분량] 한글 정확히 {target_chars}자(±8자) / 1420~1470바이트 / 한 단락(줄바꿈 절대 금지)!
+
+🚨🚨🚨 [가장 중요한 금지 사항 - 구체적 숫자 절대 금지!] 🚨🚨🚨
+검증되지 않은 활동 수치를 절대 만들어내지 마세요!
+
+❌ 절대 쓰지 말 것:
+- "주민 7명을 인터뷰" ❌
+- "사진 10장 촬영" ❌  
+- "점포 30개 방문" ❌
+- "게시물 100여 건 분석" ❌
+- "5곳의 소품샵" ❌
+- "3차례 회의" ❌
+- "10편의 논문" ❌
+- 그 어떤 구체적 숫자(1, 2, 3, ...100 등) 포함 표현 모두 금지!
+
+✅ 대신 이렇게 쓸 것:
+- "여러 명의 주민을 인터뷰" ✅
+- "다수의 사진을 촬영" ✅
+- "여러 점포를 방문" ✅
+- "관련 게시물을 분석" ✅
+- "여러 소품샵을 답사" ✅
+- "수차례 회의를 거쳐" ✅
+- "관련 문헌을 폭넓게 탐독" ✅
+
+📌 이유: 검증되지 않은 허구의 수치는 학생부 작성 윤리에 어긋남.
+📌 정성적 표현('여러', '다수의', '수차례', '폭넓게', '심도 있게')으로 풍성함을 만들 것!
+
+🚨 [기타 절대 금지]
+1. 과목명('{subject}' 등) 출력 금지
+2. 마크다운(별표, #, - 등) 사용 금지  
+3. '학생은/학생이' 등 주어 표현 금지
+4. 진학 직접 선언 금지
+
+{project_part}
+{aspiration_part}
+
+[작성 규칙]
+- 명사형 종결('~함', '~임', '~보여줌')
+- 5단계 구조: 동기(15%) → 탐구과정(25%) → 협력·문제해결(25%) → 성장(20%) → 진로 연계(15%)
+- 핵심 표현 2~3개, 권장 동사 3~4개 자연스럽게 활용
+- 디테일은 숫자가 아닌 '행동·태도·과정 묘사'로 표현
+  (예: "꼼꼼히 분석함", "심층적으로 탐구함", "다각도로 검토함")
+
+[엑셀 핵심 표현]
+{guide}
+
+[권장 동사]
+{verbs}
+
+[PDF 가이드북 참고]
+{pdf_text}
+
+[학생 활동 키워드]
+{raw_text}
+
+[추가 지시]
+{extra if extra else "없음"}
+
+→ 줄바꿈 없는 한 단락으로 본문만 출력! 구체적 숫자 절대 금지!"""
+            
+            box.warning(f"🤖 '{model_name}'로 생성 중...")
+            response = model.generate_content(prompt)
+            result = clean(response.text.strip(), subject)
+            cb = byte_count(result)
+            
+            # 자동 조절
+            if not (target_min <= cb <= target_max):
+                if cb > target_max:
+                    box.warning(f"📏 압축 중... ({cb}바이트 → 목표 {target_byte})")
+                    adj_prompt = f"""아래 문장을 정확히 한글 {target_chars}자로 압축하세요. 구체적 숫자(N명, N곳, N장 등) 사용 금지, 별표·과목명·'학생은' 금지, 명사형 종결, 한 단락 유지.
+
+[원본]
+{result}
+
+→ 본문만 출력!"""
+                elif cb < target_min:
+                    box.warning(f"📏 확장 중... ({cb}바이트 → 목표 {target_byte})")
+                    adj_prompt = f"""아래 문장을 정확히 한글 {target_chars}자로 확장하세요. 구체적 숫자 절대 금지(대신 '여러', '다수의', '수차례' 사용), 별표·과목명·'학생은' 금지, 명사형 종결, 한 단락 유지. 활동 디테일은 '행동·태도 묘사'로 풍성하게.
+
+[원본]
+{result}
+
+→ 본문만 출력!"""
                 
-                if load_excel:
-                    df_guide = pd.read_excel("data.xlsx", sheet_name="가이드북 항목별 주요 내용")
-                    df_verbs = pd.read_excel("data.xlsx", sheet_name="권장 연결 동사")
-                    guide_expressions = df_guide['핵심역량/표현'].tolist()[:15]
-                    verb_expressions = df_verbs['핵심 동사'].tolist()
+                try:
+                    new_result = clean(model.generate_content(adj_prompt).text.strip(), subject)
+                    new_cb = byte_count(new_result)
+                    if abs(new_cb - target_byte) < abs(cb - target_byte):
+                        result, cb = new_result, new_cb
+                except: pass
+            
+            # 최종 안전장치
+            if cb > target_max:
+                sentences = re.split(r'(?<=[.!?])\s+', result)
+                trimmed = ""
+                for s in sentences:
+                    test = trimmed + (" " if trimmed else "") + s
+                    if byte_count(test) <= target_max:
+                        trimmed = test
+                    else: break
+                if trimmed: result, cb = trimmed.strip(), byte_count(trimmed)
+            
+            # 결과 출력
+            box.success(f"✅ 생성 완료! (모델: {model_name})")
+            st.subheader(f"📋 생성된 문장{' - ' + aspiration + ' 맞춤' if aspiration else ''}")
+            st.text_area("결과:", value=result, height=350, label_visibility="collapsed")
+            
+            # 통계
+            c_a, c_b, c_c, c_d = st.columns(4)
+            c_a.metric("📊 글자", f"{len(result)}자")
+            c_b.metric("💾 바이트", f"{cb}byte")
+            c_c.metric("🎯 목표", "1420~1470")
+            
+            if target_min <= cb <= target_max:
+                c_d.metric("✅ 상태", "완벽")
+                st.success("✨ 목표 범위(1420~1470) 완벽 달성! 나이스에 바로 입력 가능!")
+            elif cb <= 1500:
+                c_d.metric("📝 상태", "사용가능")
+                st.info(f"📝 나이스 한도(1500) 이내. 그대로 사용 가능!")
+            elif cb < target_min:
+                c_d.metric("⚠️ 상태", f"-{target_min - cb}")
+                st.warning(f"⚠️ 목표보다 {target_min - cb}바이트 부족. 다시 생성을 권장합니다.")
+            else:
+                c_d.metric("⚠️ 상태", "초과")
+                st.error("⚠️ 한도 초과! 다시 생성을 권장합니다.")
+            
+            # 숫자 잔존 확인
+            remaining_numbers = re.findall(r'\d+\s*(?:명|곳|장|편|권|회|개|건|종|차례|번|점포|군데|가지|시간)', result)
+            if remaining_numbers:
+                st.warning(f"⚠️ 일부 수치 표현이 남아있을 수 있음: {', '.join(remaining_numbers[:5])} - 확인 후 수정해 주세요.")
+            else:
+                st.info("✅ 구체적 수치 없이 정성적 표현으로 깔끔하게 작성되었습니다!")
                 
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                prompt = f"""
-                너는 고등학교 베테랑 교사이자 대학 입학사정관이야. 
-                제공된 학생의 데이터를 바탕으로 나이스(NEIS) 학교생활기록부 세부능력 및 특기사항 문장을 작성해줘.
-                
-                [참고할 대학 권장 표현]: {guide_expressions}
-                [마무리 권장 동사]: {verb_expressions}
-                
-                [학생 기본 데이터]
-                - 과목명: {subject_name}
-                - 진학 희망 학과: {major_name}
-                - 강조 역량 설정: {selected_competency}
-                - 교사 지정 핵심 키워드: {subject_keywords}
-                - 추가 강조 포인트: {extra_info}
-                
-                [활동 내역 및 세부 내용] (총 {num_activities}개)
-                {activities_str}
-                
-                [작성 원칙 및 분량 배분 가이드] - 매우 중요
-                1. 전체 분량: 공백 포함 450자~500자 (약 1420~1470 바이트) 내외로 맞출 것.
-                2. 활동량 배분: 입력된 활동이 총 {num_activities}개입니다. 
-                   - 1개일 경우: 해당 활동의 동기-과정-성취를 깊이 있게 작성하여 전체 분량을 채울 것.
-                   - 2개 이상일 경우: 전체 분량을 {num_activities}개의 활동에 균등하게 배분하여 작성하고, 활동 간의 연결고리가 자연스럽게 이어지도록 유기적으로 엮을 것.
-                3. 교과 전문성: 교사가 지정한 [교사 지정 핵심 키워드]를 활동 내용에 자연스럽게 녹여내어 전공 적합성과 교과 이해도를 입증할 것.
-                4. 구조 및 표현: 객관적인 명사형 종결 어미('~함', '~임')를 사용하고, [참고할 대학 권장 표현]과 [마무리 권장 동사]를 적극 활용할 것.
-                """
-                
-                if remove_numbers:
-                    prompt += "\n5. 주의: 문장 생성 시 구체적인 수치(예: 10%, 30명 등)는 제외하고 서술형으로 부드럽게 풀어 쓸 것."
-                
-                response = model.generate_content(prompt)
-                
-                st.success(f"✅ 총 {num_activities}개의 활동을 완벽하게 배분한 문장 생성 완료!")
-                st.subheader("📝 최종 생성된 학생부 세특 기록")
-                st.info(response.text)
-                
-                st.divider()
-                st.caption(f"📏 공백 포함 약 {len(response.text)}자 (1글자당 한글 3바이트, 공백/영어 1바이트 기준 약 {len(response.text)*2.8:.0f} 바이트 추정)")
-                
-            except Exception as e:
-                st.error(f"오류가 발생했습니다. 상세 오류: {e}")
+        except Exception as e:
+            box.error(f"오류: {e}")
+            st.info("💡 1~2분 후 재시도 또는 새 API 키 발급")
+
+# ===== 푸터(만든이 정보) =====
+st.divider()
+st.markdown("""
+<div style='text-align: center; color: #333333; padding: 20px; font-size: 17px; font-weight: bold;'>
+    🏫 학생부 입력 어시스트 시스템 v3.0<br>
+    만든이: 신선여자고등학교 김명남<br>
+    🗓️ 2026.03.
+</div>
+""", unsafe_allow_html=True)
