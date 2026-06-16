@@ -180,7 +180,7 @@ with col_act2:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    st.markdown("**🔹 활동 4 (선택)**")
+    st.markdown("**🔹 활동 4 (전공지식 확장을 위한 주제탐구보고서 작성)**")
     act4_name = st.text_input("활동명 4", placeholder="", label_visibility="collapsed")
     act4_desc = st.text_area("활동 4 상세 내용", placeholder="활동 상세 내용 입력", height=100)
 
@@ -193,7 +193,7 @@ col_add1, col_add2 = st.columns(2)
 with col_add1:
     st.markdown("**🧠 교과 핵심 아이디어 및 내용 요소**")
     st.caption("해당 교과에서 강조하고 싶은 키워드를 입력하세요.")
-    subject_keywords = st.text_area("핵심 키워드 입력", placeholder="예: [지리] 세계화와 세계시민 / 해수 담수화 기술 활용", height=100, label_visibility="collapsed")
+    subject_keywords = st.text_area("핵심 키워드 입력", placeholder="예: 세계시민역량, 표층순환, DNA와 유전자, 빛과 물질의 이중성, 공유결합의 극성 ", height=100, label_visibility="collapsed")
 
 with col_add2:
     st.markdown("**🔍 개별화를 위한 추가 강조 포인트**")
