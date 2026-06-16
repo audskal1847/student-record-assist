@@ -23,9 +23,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
     # 기존 링크 + 새로운 '선택과목 안내서' 링크 추가
-    st.link_button("📖 신선여자고등학교 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
-    st.link_button("📖 신선여자고등학교 가이드북(2025)", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
-    st.link_button("📖 신선여고 계열별 학과 안내", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
+    st.link_button("📖 교과 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
+    st.link_button("📖 교과 가이드북(2025)", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
+    st.link_button("📖 계열별 학과 안내", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
     st.link_button("📄 선택과목 안내서 보러가기", "여기에_링크를_넣어주세요", use_container_width=True)
 
 # 3. 메인 화면 타이틀
