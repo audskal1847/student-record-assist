@@ -116,7 +116,6 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ==========================================
 if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primary", use_container_width=True):
     
-    # 활동 수합 로직
     activities_data = []
     if activity_1_name.strip() and activity_1_desc.strip():
         activities_data.append(f"[활동 1: {activity_1_name.strip()}]\n- 상세 내용: {activity_1_desc.strip()}")
@@ -140,14 +139,21 @@ if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primar
                 guide_expressions = []
                 verb_expressions = []
                 
-                # 캐시된 엑셀 데이터를 빠르게 불러옵니다.
                 if load_excel:
                     guide_expressions, verb_expressions = load_excel_data()
                 
                 genai.configure(api_key=api_key)
                 
-                # 🔥 최신 모델(gemini-1.5-flash)로 완벽하게 고정했습니다.
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # 🔥 [오류 완벽 차단 로직] 사용 가능한 모델을 자동 검색하여 연결합니다.
+                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                
+                selected_model = 'gemini-pro' # 최후의 예비 모델
+                for preferred in ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-1.0-pro']:
+                    if preferred in available_models:
+                        selected_model = preferred.replace('models/', '')
+                        break
+                        
+                model = genai.GenerativeModel(selected_model)
                 
                 prompt = f"""
                 너는 고등학교 베테랑 교사이자 대학 입학사정관이야. 
@@ -180,7 +186,7 @@ if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primar
                 
                 response = model.generate_content(prompt)
                 
-                st.success(f"✅ 총 {num_activities}개의 활동을 완벽하게 배분한 문장 생성 완료!")
+                st.success(f"✅ 총 {num_activities}개의 활동을 완벽하게 배분한 문장 생성 완료! (사용된 AI: {selected_model})")
                 st.subheader("📝 최종 생성된 학생부 세특 기록")
                 st.info(response.text)
                 
