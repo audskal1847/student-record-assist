@@ -34,7 +34,6 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
-    # 요청하신 대로 링크 간소화
     st.link_button("📖 교과 선택 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
     st.link_button("📄 선택과목 안내서 보러가기", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
 
@@ -115,7 +114,6 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ==========================================
 # 5. 분석 시작 및 AI 연동
 # ==========================================
-# type="primary"를 추가하여 버튼 색상을 빨간색(강조색)으로 변경했습니다.
 if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primary", use_container_width=True):
     
     # 활동 수합 로직
@@ -148,8 +146,8 @@ if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primar
                 
                 genai.configure(api_key=api_key)
                 
-                # 속도 저하의 주범이었던 이중 호출을 제거하고, 선생님 환경에 맞는 안정적인 pro 모델로 직행합니다.
-                model = genai.GenerativeModel('gemini-pro')
+                # 🔥 최신 모델(gemini-1.5-flash)로 완벽하게 고정했습니다.
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 prompt = f"""
                 너는 고등학교 베테랑 교사이자 대학 입학사정관이야. 
