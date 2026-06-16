@@ -22,9 +22,9 @@ with st.sidebar:
     
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
-    st.link_button("📖 신선여자고등학교 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
-    st.link_button("📖 신선여자고등학교 가이드북(2025)", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
-    st.link_button("📖 신선여고 계열별 학과 안내", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
+    st.link_button("📖 교과 선택 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
+    st.link_button("📖 교과 선택 가이드북(2025)", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
+    st.link_button("📖 계열별 학과 안내", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
     st.link_button("📄 선택과목 안내서 보러가기", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
 
 # 3. 메인 화면 타이틀
@@ -42,27 +42,39 @@ with col1:
     selected_competency = st.selectbox("🎯 강조 역량", ["AI에게 알아서 맡기기", "학업 역량", "진로 역량", "공동체 역량"])
     
     st.markdown("---")
-    st.markdown("**🎯 구체적인 활동명 입력 (최대 4개)**")
-    st.caption("진행한 활동의 개수만큼 입력하세요. AI가 개수에 맞춰 분량을 자동 배분합니다.")
+    st.markdown("**🎯 구체적인 활동 및 상세 내용 입력 (최대 4개)**")
+    st.caption("진행한 활동의 개수만큼 입력하세요. 활동명과 그에 따른 학생의 구체적인 역할/성취를 세트로 작성합니다.")
     
-    # ⭐ [수정된 부분] 4개의 개별 활동명 입력창
-    activity_1 = st.text_input("활동명 1 (필수)", placeholder="예: 커뮤니티 매핑 지도 만들기")
-    activity_2 = st.text_input("활동명 2 (선택)", placeholder="예: 지속가능한 도시 개발 보고서 작성")
-    activity_3 = st.text_input("활동명 3 (선택)", placeholder="예: 기후 변화 대응 캠페인")
-    activity_4 = st.text_input("활동명 4 (선택)", placeholder="")
+    # ⭐ [수정된 부분] 활동명과 상세 내용을 세트로 묶어서 입력받음
+    activity_1_name = st.text_input("활동명 1 (필수)", placeholder="예: 커뮤니티 매핑 지도 만들기")
+    activity_1_desc = st.text_area("활동 1 상세 내용 (필수)", placeholder="위 활동에 대한 학생의 구체적인 역할, 배우고 느낀 점, 성취 등을 자세히 적어주세요.", height=80)
+    
+    st.markdown("<hr style='margin: 10px 0; border-top: 1px dashed #ddd;'>", unsafe_allow_html=True)
+    
+    activity_2_name = st.text_input("활동명 2 (선택)", placeholder="예: 지속가능한 도시 개발 보고서 작성")
+    activity_2_desc = st.text_area("활동 2 상세 내용 (선택)", placeholder="위 활동에 대한 상세 내용 입력", height=80)
+    
+    st.markdown("<hr style='margin: 10px 0; border-top: 1px dashed #ddd;'>", unsafe_allow_html=True)
+    
+    activity_3_name = st.text_input("활동명 3 (선택)", placeholder="예: 기후 변화 대응 캠페인")
+    activity_3_desc = st.text_area("활동 3 상세 내용 (선택)", placeholder="위 활동에 대한 상세 내용 입력", height=80)
+    
+    st.markdown("<hr style='margin: 10px 0; border-top: 1px dashed #ddd;'>", unsafe_allow_html=True)
+    
+    activity_4_name = st.text_input("활동명 4 (선택)", placeholder="")
+    activity_4_desc = st.text_area("활동 4 상세 내용 (선택)", placeholder="위 활동에 대한 상세 내용 입력", height=80)
     
     st.markdown("---")
     
+    # ⭐ [수정된 부분] 교사의 판단이 개입되는 교과 핵심 아이디어
     st.markdown("**🧠 교과 핵심 아이디어 및 내용 요소 (선택과목 안내서 참고)**")
+    st.caption("학생의 상황과 진학 목표에 맞춰, 선생님의 판단하에 강조하고 싶은 해당 교과의 핵심 키워드를 입력하세요.")
     subject_keywords = st.text_area(
-        "해당 교과의 핵심 키워드를 입력하세요.", 
-        placeholder="예: [물리학] 역학적 에너지 보존, 시공간의 이해",
+        "핵심 아이디어 입력란", 
+        placeholder="예: [물리학] 역학적 에너지 보존 / 학생의 진로(건축)와 연결하여 '힘과 평형' 개념 강조 희망",
         height=80,
         label_visibility="collapsed"
     )
-    
-    raw_text = st.text_area("✍️ 학생 활동 핵심 키워드 및 상세 내용", height=150, 
-                            placeholder="위에서 입력한 활동(들)에 대한 학생의 구체적인 역할, 배우고 느낀 점, 성취 등을 자세히 적어주세요.")
 
 with col2:
     st.subheader("2. 추가 반영사항")
@@ -74,17 +86,26 @@ with col2:
     # 분석 시작 버튼
     if st.button("🚀 학생 맞춤형 개별 문장 생성", use_container_width=True):
         
-        # 입력된 활동 목록 리스트화 (빈 칸 제외)
-        activities = [act.strip() for act in [activity_1, activity_2, activity_3, activity_4] if act.strip()]
+        # ⭐ [수정된 부분] 입력된 활동 세트(이름+내용)를 수합하는 로직
+        activities_data = []
+        if activity_1_name.strip() and activity_1_desc.strip():
+            activities_data.append(f"[활동 1: {activity_1_name.strip()}]\n- 상세 내용: {activity_1_desc.strip()}")
+        if activity_2_name.strip() and activity_2_desc.strip():
+            activities_data.append(f"[활동 2: {activity_2_name.strip()}]\n- 상세 내용: {activity_2_desc.strip()}")
+        if activity_3_name.strip() and activity_3_desc.strip():
+            activities_data.append(f"[활동 3: {activity_3_name.strip()}]\n- 상세 내용: {activity_3_desc.strip()}")
+        if activity_4_name.strip() and activity_4_desc.strip():
+            activities_data.append(f"[활동 4: {activity_4_name.strip()}]\n- 상세 내용: {activity_4_desc.strip()}")
+            
+        num_activities = len(activities_data)
+        activities_str = "\n\n".join(activities_data)
         
         if not api_key:
             st.error("왼쪽 사이드바에서 API 키를 먼저 입력해 주세요!")
-        elif not activities:
-            st.warning("최소 1개 이상의 구체적인 활동명을 입력해 주세요!")
-        elif not raw_text:
-            st.warning("학생 활동 핵심 키워드 및 상세 내용을 입력해 주세요!")
+        elif num_activities == 0:
+            st.warning("최소 1개 이상의 구체적인 활동명과 상세 내용을 모두 입력해 주세요! (활동 1 필수)")
         else:
-            with st.spinner("활동 개수와 교과 핵심 개념을 분석하여 맞춤형 분량으로 문장을 생성 중입니다..."):
+            with st.spinner(f"총 {num_activities}개의 활동을 분석하여 맞춤형 분량으로 문장을 생성 중입니다..."):
                 try:
                     guide_expressions = ""
                     verb_expressions = ""
@@ -98,10 +119,7 @@ with col2:
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    num_activities = len(activities)
-                    activities_str = ", ".join(activities)
-                    
-                    # ⭐ [업데이트됨] 다중 활동 분량 배분 및 목표 바이트 설정 프롬프트
+                    # 프롬프트 구성 (활동 세트 통합 반영)
                     prompt = f"""
                     너는 고등학교 베테랑 교사이자 대학 입학사정관이야. 
                     제공된 학생의 데이터를 바탕으로 나이스(NEIS) 학교생활기록부 세부능력 및 특기사항 문장을 작성해줘.
@@ -109,24 +127,23 @@ with col2:
                     [참고할 대학 권장 표현]: {guide_expressions}
                     [마무리 권장 동사]: {verb_expressions}
                     
-                    [학생 데이터]
+                    [학생 기본 데이터]
                     - 과목명: {subject_name}
                     - 진학 희망 학과: {major_name}
                     - 강조 역량 설정: {selected_competency}
-                    - 교과 핵심 키워드: {subject_keywords}
+                    - 교사 지정 핵심 키워드: {subject_keywords}
                     - 추가 강조 포인트: {extra_info}
                     
-                    [활동 내역 및 세부 내용]
-                    - 수행한 구체적 활동 목록 (총 {num_activities}개): {activities_str}
-                    - 학생 활동 세부 내용: {raw_text}
+                    [활동 내역 및 세부 내용] (총 {num_activities}개)
+                    {activities_str}
                     
                     [작성 원칙 및 분량 배분 가이드] - 매우 중요
                     1. 전체 분량: 공백 포함 450자~500자 (약 1420~1470 바이트) 내외로 맞출 것.
                     2. 활동량 배분: 입력된 활동이 총 {num_activities}개입니다. 
-                       - 1개일 경우: 해당 활동의 동기-과정-성취를 깊이 있게 작성하여 전체 분량(100%)을 채울 것.
-                       - 2개 이상일 경우: 전체 분량을 {num_activities}개의 활동에 균등하게 배분(예: 2개면 50%씩, 3개면 33%씩)하여, 활동 간의 연결고리가 자연스럽게 이어지도록 유기적으로 엮어서 작성할 것. 특정 활동에만 치우치지 않게 할 것.
-                    3. 교과 전문성: [교과 핵심 키워드]를 [활동 세부 내용]에 녹여내어 전공 적합성을 드러낼 것.
-                    4. 구조 및 표현: 객관적인 명사형 종결 어미('~함', '~임')를 사용하고, [참고할 대학 권장 표현]과 [마무리 권장 동사]를 적절히 활용할 것.
+                       - 1개일 경우: 해당 활동의 동기-과정-성취를 깊이 있게 작성하여 전체 분량을 채울 것.
+                       - 2개 이상일 경우: 전체 분량을 {num_activities}개의 활동에 균등하게 배분하여 작성하고, 활동 간의 연결고리가 자연스럽게 이어지도록 유기적으로 엮을 것.
+                    3. 교과 전문성: 교사가 지정한 [교사 지정 핵심 키워드]를 활동 내용에 자연스럽게 녹여내어 전공 적합성과 교과 이해도를 입증할 것.
+                    4. 구조 및 표현: 객관적인 명사형 종결 어미('~함', '~임')를 사용하고, [참고할 대학 권장 표현]과 [마무리 권장 동사]를 적극 활용할 것.
                     """
                     
                     if remove_numbers:
@@ -134,7 +151,7 @@ with col2:
                     
                     response = model.generate_content(prompt)
                     
-                    st.success(f"✅ 총 {num_activities}개의 활동을 반영한 문장 생성 완료!")
+                    st.success(f"✅ 총 {num_activities}개의 활동을 완벽하게 배분한 문장 생성 완료!")
                     st.subheader("📝 최종 생성된 학생부 세특 기록")
                     st.info(response.text)
                     
