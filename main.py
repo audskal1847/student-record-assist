@@ -208,10 +208,10 @@ st.divider()
 # ===== 7. 생성 로직 =====
 if submit:
     activities_data = []
-    if act1_name.strip() and act1_desc.strip(): activities_data.append(f"[활동 1: {act1_name.strip()}]\n- 내용: {act1_desc.strip()}")
-    if act2_name.strip() and act2_desc.strip(): activities_data.append(f"[활동 2: {act2_name.strip()}]\n- 내용: {act2_desc.strip()}")
-    if act3_name.strip() and act3_desc.strip(): activities_data.append(f"[활동 3: {act3_name.strip()}]\n- 내용: {act3_desc.strip()}")
-    if act4_name.strip() and act4_desc.strip(): activities_data.append(f"[활동 4: {act4_name.strip()}]\n- 내용: {act4_desc.strip()}")
+    if act1_name.strip() and act1_desc.strip(): activities_data.append(f"[활동명: {act1_name.strip()}]\n- 상세 내용: {act1_desc.strip()}")
+    if act2_name.strip() and act2_desc.strip(): activities_data.append(f"[활동명: {act2_name.strip()}]\n- 상세 내용: {act2_desc.strip()}")
+    if act3_name.strip() and act3_desc.strip(): activities_data.append(f"[활동명: {act3_name.strip()}]\n- 상세 내용: {act3_desc.strip()}")
+    if act4_name.strip() and act4_desc.strip(): activities_data.append(f"[활동명: {act4_name.strip()}]\n- 상세 내용: {act4_desc.strip()}")
         
     num_activities = len(activities_data)
     activities_str = "\n\n".join(activities_data)
@@ -238,35 +238,36 @@ if submit:
             aspiration_part = f"""
             🎓 진학 희망: '{aspiration}'
             - 이 학과·계열 관점에서 활동을 재해석하여 강조
-            - 결말부 약 15%를 '{aspiration}' 관련 학문적 호기심·후속 탐구 의지로 자연스럽게 마무리
-            - ❌ "○○학과 진학 희망" 같은 직접 선언 금지!
-            - ✅ "○○ 분야에 대한 관심을 심화함" 등 우회 표현 사용
+            - 결말부를 '{aspiration}' 관련 학문적 호기심·후속 탐구 의지로 자연스럽게 마무리
+            - ❌ "○○학과 진학 희망" 직접 선언 금지!
             """ if aspiration.strip() else ""
             
             keyword_part = f"""
             🧠 교과 핵심 키워드: {subject_keywords}
-            - 위 제공된 교과 키워드를 활동 내용에 유기적으로 녹여내어 전공 적합성과 교과 이해도를 입증할 것.
             """ if subject_keywords.strip() else ""
             
-            # 🔥 핵심 변경: 어투 및 종결어미 강력 통제 프롬프트 추가
+            # 🔥 핵심 변경: 문장 호흡, 활동명 보존, 첫 문장 배치 규칙 강력 추가
             prompt = f"""당신은 20년 경력의 베테랑 학생부 작성 교사입니다. 학생 활동 내역을 바탕으로 풍성한 학생부 문장을 작성해 주세요.
 
-            🚨🚨🚨 [어투 및 종결어미 절대 규칙 - 가장 중요함!!!] 🚨🚨🚨
-            모든 문장의 끝은 무조건 '~함', '~임', '~됨', '~음'으로 끝나는 개조식(명사형) 종결어미로 작성하세요!
-            ❌ 절대 금지: '~습니다', '~해요', '~다', '~고찰하였습니다', '~보였습니다'와 같은 존댓말 및 서술어 형태의 마무리는 절대 금지합니다! (위반 시 학생부 입력 불가)
+            🚨🚨🚨 [어투 및 종결어미 절대 규칙] 🚨🚨🚨
+            모든 문장의 끝은 무조건 '~함', '~임', '~됨'으로 끝나는 개조식(명사형) 종결어미로 작성하세요!
+            ❌ 금지: '~습니다', '~해요', '~다' 등 서술형 어미 절대 금지.
+
+            🚨 [작성 및 배치 절대 규칙 - 매우 중요!!!] 🚨
+            1. 첫 문장 고정: [교과 핵심 키워드]가 제공된 경우, 이를 바탕으로 한 교과 역량 및 학업적 지향점을 반드시 **전체 글의 가장 첫 번째 문장**에 작성하세요.
+            2. 활동명 원문 보존: 제공된 [활동 내역]의 '활동명'은 절대 임의로 바꾸거나 생략하지 마세요! 생성되는 문장 내에 작은따옴표('')로 묶어 원문 그대로 출력하고, 그 뒤에 활동 상세 내용을 유기적으로 풀어쓰세요. (예: '{act1_name}'에 참여하여 ~을 탐구함)
+            3. 문장 길이와 호흡: 문장이 너무 짧은 단답형으로 툭툭 끊어지지 않도록 주의하세요. 적절한 연결 어미(~하며, ~고, ~을 통해 등)를 사용하여 호흡이 길고 매끄러운 학술적인 문장으로 구성하세요.
 
             🚨 [필수 분량] 한글 정확히 {target_chars}자(±8자) / 1420~1470바이트 / 한 단락(줄바꿈 절대 금지)!
 
-            🚨 [가장 중요한 금지 사항 - 구체적 숫자 절대 금지!]
-            검증되지 않은 활동 수치를 절대 만들어내지 마세요!
-            ❌ 절대 쓰지 말 것: "주민 7명을 인터뷰", "사진 10장 촬영", "3차례 회의" 등 구체적 숫자(1, 2, 3...100) 모두 금지!
-            ✅ 대신 이렇게 쓸 것: "여러 명의 주민을 인터뷰", "다수의 사진을 촬영", "수차례 회의를 거쳐" 등 정성적 표현 사용!
+            🚨 [구체적 숫자 절대 금지!]
+            검증되지 않은 수치(예: "주민 7명", "사진 10장", "3차례 회의") 절대 금지! 
+            ✅ 대신 "여러 명의", "다수의", "수차례" 등 정성적 표현 사용.
 
             🚨 [기타 절대 금지]
             1. 과목명('{subject}' 등) 출력 금지
             2. 마크다운(별표, #, - 등) 사용 금지  
             3. '학생은/학생이' 등 주어 표현 금지
-            4. 진학 직접 선언 금지
 
             {aspiration_part}
             {keyword_part}
@@ -274,11 +275,9 @@ if submit:
             [활동 내역 및 세부 내용] (총 {num_activities}개)
             {activities_str}
 
-            [작성 규칙 및 분량 배분 가이드]
-            - {num_activities}개의 활동을 유기적으로 연결하여 균형 있게 배분할 것. 특정 활동에만 치우치지 않도록 작성.
-            - 구조: 동기(15%) → 탐구과정 및 교과 연계(25%) → 협력·문제해결(25%) → 성장(20%) → 진로 연계(15%)
-            - 핵심 표현 2~3개, 권장 동사 3~4개 자연스럽게 활용
-            - 디테일은 숫자가 아닌 '행동·태도·과정 묘사'로 표현
+            [작성 규칙]
+            - {num_activities}개의 활동을 유기적으로 연결하여 균형 있게 배분할 것. 
+            - 엑셀 핵심 표현 2~3개, 권장 동사 3~4개 자연스럽게 활용.
 
             [엑셀 핵심 표현]
             {guide}
@@ -292,26 +291,32 @@ if submit:
             [추가 지시]
             {extra if extra else "없음"}
 
-            → 줄바꿈 없는 한 단락으로 본문만 출력! 구체적 숫자 절대 금지! 명사형 종결 필수!"""
+            → 줄바꿈 없는 한 단락으로 본문만 출력! 문장 호흡 길게! 활동명 그대로 출력! 첫 문장은 핵심 키워드!"""
             
             box.warning(f"🤖 '{model_name}'로 최적의 문장 생성 중...")
             response = model.generate_content(prompt)
             result = clean(response.text.strip(), subject)
             cb = byte_count(result)
             
-            # 🔥 핵심 변경: 분량 조절(압축/팽창) 프롬프트에도 종결어미 규칙 강력 주입
+            # 🔥 핵심 변경: 분량 조절(압축/팽창) 시에도 3대 절대 규칙이 풀리지 않도록 강제 적용
             if not (target_min <= cb <= target_max):
                 if cb > target_max:
                     box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
-                    adj_prompt = f"""아래 원본 문장을 정확히 한글 {target_chars}자 분량으로 압축하세요. 
-                    🚨 [절대 규칙 1]: 모든 문장의 끝은 무조건 '~함', '~임'으로 끝나는 명사형 종결어미를 사용할 것! ('~습니다', '~다' 절대 금지)
-                    🚨 [절대 규칙 2]: 구체적 숫자 사용 금지, 마크다운 기호·과목명·'학생은' 금지, 한 단락 유지.
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요. 
+                    🚨 [압축 시 절대 규칙]
+                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    2. 첫 번째 문장의 내용(교과 핵심 키워드)은 절대 지우지 말고 맨 앞에 둘 것.
+                    3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
+                    4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용하여 매끄럽게 이을 것. 구체적 숫자 금지.
                     [원본]\n{result}\n→ 본문만 출력!"""
                 elif cb < target_min:
                     box.warning(f"📏 분량 확장 중... ({cb}바이트 → 목표 {target_byte})")
-                    adj_prompt = f"""아래 원본 문장을 정확히 한글 {target_chars}자 분량으로 확장하세요. 
-                    🚨 [절대 규칙 1]: 모든 문장의 끝은 무조건 '~함', '~임'으로 끝나는 명사형 종결어미를 사용할 것! ('~습니다', '~다' 절대 금지)
-                    🚨 [절대 규칙 2]: 구체적 숫자 절대 금지, 마크다운 기호·과목명·'학생은' 금지, 한 단락 유지.
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 확장하세요. 
+                    🚨 [확장 시 절대 규칙]
+                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    2. 첫 번째 문장의 내용(교과 핵심 키워드)은 전체 글 맨 앞에 그대로 둘 것.
+                    3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
+                    4. 문장이 툭툭 끊기지 않도록 호흡이 길고 매끄러운 문장으로 확장할 것. 구체적 숫자 금지.
                     [원본]\n{result}\n→ 본문만 출력!"""
                 
                 try:
@@ -357,7 +362,7 @@ if submit:
             if remaining_numbers:
                 st.warning(f"⚠️ 시스템이 수치를 정성적으로 치환했으나, 일부 숫자 표현이 남아있을 수 있습니다: {', '.join(remaining_numbers[:5])} - 확인 후 직접 수정해 주세요.")
             else:
-                st.info("✅ 구체적 수치나 경어체 없이 대학이 선호하는 정성적이고 학술적인 개조식 표현으로 작성되었습니다!")
+                st.info("✅ 구체적 수치 없이 대학이 선호하는 정성적이고 학술적인 개조식 표현으로 작성되었습니다!")
                 
         except Exception as e:
             box.error(f"오류가 발생했습니다: {e}")
@@ -367,7 +372,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v3.2</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v3.3</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
