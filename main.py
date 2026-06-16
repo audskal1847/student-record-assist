@@ -2,21 +2,7 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 
-# ==========================================
-# 0. 성능 최적화: 엑셀 데이터 캐싱 (한 번만 읽고 기억)
-# ==========================================
-@st.cache_data
-def load_excel_data():
-    try:
-        df_guide = pd.read_excel("data.xlsx", sheet_name="가이드북 항목별 주요 내용")
-        df_verbs = pd.read_excel("data.xlsx", sheet_name="권장 연결 동사")
-        guide_expressions = df_guide['핵심역량/표현'].tolist()[:15]
-        verb_expressions = df_verbs['핵심 동사'].tolist()
-        return guide_expressions, verb_expressions
-    except Exception as e:
-        return [], []
-
-# 1. 페이지 설정
+# 1. 페이지 설정 (넓은 화면 사용)
 st.set_page_config(page_title="학생부 입력 어시스트", layout="wide")
 
 # 2. 사이드바 구성
@@ -28,20 +14,27 @@ with st.sidebar:
     st.markdown("---")
     
     load_excel = st.checkbox("✅ 엑셀 사전 로드 (표현 90개 / 동사 10개)", value=True)
+    load_pdf = st.checkbox("✅ PDF 가이드북 1개 로드", value=True)
     
+    # 텍스트 취소선 오류 수정을 위해 하이픈(-) 적용
     st.info("🎯 목표: 1420 - 1470 바이트 (약 450 - 500자)")
     remove_numbers = st.checkbox("🔢 구체적 숫자 자동 제거")
     
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
+    # 요청하신 명칭으로 깔끔하게 수정
     st.link_button("📖 교과 선택 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
+    st.link_button("📖 교과 선택 가이드북(2025)", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
+    st.link_button("📖 계열별 학과 안내", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
     st.link_button("📄 선택과목 안내서 보러가기", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
 
 # 3. 메인 화면 타이틀
 st.title("📝 학생부 입력 어시스트")
 st.caption("학생을 설명할 수 있는 핵심 키워드와 희망 진로를 입력하면, 학생별 맞춤형 학생부 기록이 생성됩니다.")
 
+# ==========================================
 # 4. 레이아웃 재구성 (세로 스크롤 최소화)
+# ==========================================
 
 # [섹션 1] 기본 정보 (가로 3단)
 st.markdown("#### 1. 학생 기본 정보")
@@ -94,7 +87,7 @@ with col_add1:
     st.caption("해당 교과에서 강조하고 싶은 키워드를 입력하세요. (선택과목 안내서 참고)")
     subject_keywords = st.text_area(
         "핵심 아이디어 입력", 
-        placeholder="예: [지리] 세계화와 세계시민 / 해수 담수화 기술 활용",
+        placeholder="예: [물리학] 역학적 에너지 보존 / 학생의 진로(건축)와 연결하여 '힘과 평형' 개념 강조",
         height=100,
         label_visibility="collapsed"
     )
@@ -114,8 +107,9 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ==========================================
 # 5. 분석 시작 및 AI 연동
 # ==========================================
-if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primary", use_container_width=True):
+if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", use_container_width=True):
     
+    # 활동 수합 로직
     activities_data = []
     if activity_1_name.strip() and activity_1_desc.strip():
         activities_data.append(f"[활동 1: {activity_1_name.strip()}]\n- 상세 내용: {activity_1_desc.strip()}")
@@ -136,24 +130,17 @@ if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primar
     else:
         with st.spinner(f"총 {num_activities}개의 활동을 분석하여 맞춤형 분량으로 문장을 생성 중입니다..."):
             try:
-                guide_expressions = []
-                verb_expressions = []
+                guide_expressions = ""
+                verb_expressions = ""
                 
                 if load_excel:
-                    guide_expressions, verb_expressions = load_excel_data()
+                    df_guide = pd.read_excel("data.xlsx", sheet_name="가이드북 항목별 주요 내용")
+                    df_verbs = pd.read_excel("data.xlsx", sheet_name="권장 연결 동사")
+                    guide_expressions = df_guide['핵심역량/표현'].tolist()[:15]
+                    verb_expressions = df_verbs['핵심 동사'].tolist()
                 
                 genai.configure(api_key=api_key)
-                
-                # 🔥 [오류 완벽 차단 로직] 사용 가능한 모델을 자동 검색하여 연결합니다.
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                
-                selected_model = 'gemini-pro' # 최후의 예비 모델
-                for preferred in ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-1.0-pro']:
-                    if preferred in available_models:
-                        selected_model = preferred.replace('models/', '')
-                        break
-                        
-                model = genai.GenerativeModel(selected_model)
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
                 prompt = f"""
                 너는 고등학교 베테랑 교사이자 대학 입학사정관이야. 
@@ -186,7 +173,7 @@ if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", type="primar
                 
                 response = model.generate_content(prompt)
                 
-                st.success(f"✅ 총 {num_activities}개의 활동을 완벽하게 배분한 문장 생성 완료! (사용된 AI: {selected_model})")
+                st.success(f"✅ 총 {num_activities}개의 활동을 완벽하게 배분한 문장 생성 완료!")
                 st.subheader("📝 최종 생성된 학생부 세특 기록")
                 st.info(response.text)
                 
