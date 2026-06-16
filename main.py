@@ -16,13 +16,11 @@ with st.sidebar:
     load_excel = st.checkbox("✅ 엑셀 사전 로드 (표현 90개 / 동사 10개)", value=True)
     load_pdf = st.checkbox("✅ PDF 가이드북 1개 로드", value=True)
     
-    # 텍스트 취소선 오류 수정을 위해 하이픈(-) 적용
     st.info("🎯 목표: 1420 - 1470 바이트 (약 450 - 500자)")
     remove_numbers = st.checkbox("🔢 구체적 숫자 자동 제거")
     
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
-    # 요청하신 명칭으로 깔끔하게 수정
     st.link_button("📖 교과 선택 가이드북(2026)", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
     st.link_button("📖 교과 선택 가이드북(2025)", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
     st.link_button("📖 계열별 학과 안내", "https://ebook.dsummer.co.kr/books/exkt/#p=1", use_container_width=True)
@@ -140,8 +138,8 @@ if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", use_containe
                     verb_expressions = df_verbs['핵심 동사'].tolist()
                 
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
                 
+                # 프롬프트 구성
                 prompt = f"""
                 너는 고등학교 베테랑 교사이자 대학 입학사정관이야. 
                 제공된 학생의 데이터를 바탕으로 나이스(NEIS) 학교생활기록부 세부능력 및 특기사항 문장을 작성해줘.
@@ -171,7 +169,16 @@ if st.button("🚀 학생 맞춤형 개별 문장 생성 (클릭)", use_containe
                 if remove_numbers:
                     prompt += "\n5. 주의: 문장 생성 시 구체적인 수치(예: 10%, 30명 등)는 제외하고 서술형으로 부드럽게 풀어 쓸 것."
                 
-                response = model.generate_content(prompt)
+                # [오류 해결] 최신 모델 시도 후 실패 시 안정화된 이전 모델(gemini-pro)로 자동 전환
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(prompt)
+                except Exception as model_error:
+                    if "404" in str(model_error) or "not found" in str(model_error):
+                        model = genai.GenerativeModel('gemini-pro')
+                        response = model.generate_content(prompt)
+                    else:
+                        raise model_error
                 
                 st.success(f"✅ 총 {num_activities}개의 활동을 완벽하게 배분한 문장 생성 완료!")
                 st.subheader("📝 최종 생성된 학생부 세특 기록")
