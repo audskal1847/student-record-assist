@@ -180,8 +180,8 @@ with col_act2:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    st.markdown("**🔹 활동 4 (전공지식 확장을 위한 주제탐구보고서 작성)**")
-    act4_name = st.text_input("활동명 4", placeholder="", label_visibility="collapsed")
+    st.markdown("**🔹 활동 4 (선택)**")
+    act4_name = st.text_input("활동명 4", placeholder="전공지식 확장을 위한 주제탐구보고서 작성", label_visibility="collapsed")
     act4_desc = st.text_area("활동 4 상세 내용", placeholder="활동 상세 내용 입력", height=100)
 
 st.markdown("---")
