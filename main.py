@@ -233,8 +233,9 @@ with st.sidebar:
 st.title("📝 학생부 입력 어시스트")
 st.caption("선택한 교육과정과 교과 핵심 키워드를 기반으로 유기적으로 연결된 개별화 학생부 기록이 생성됩니다.")
 
-# 🔥 교육과정 선택 라디오 버튼
-curriculum_version = st.radio("📘 적용 교육과정 선택", ["2015 개정 교육과정", "2022 개정 교육과정"], horizontal=True)
+# 🔥 교육과정 선택 UI (크고 굵게 강조)
+st.markdown("### 📘 **적용 교육과정 선택**")
+curriculum_version = st.radio("적용 교육과정 선택", ["2015 개정 교육과정", "2022 개정 교육과정"], horizontal=True, label_visibility="collapsed")
 
 # 선택된 교육과정에 따른 변수 할당
 if curriculum_version == "2015 개정 교육과정":
@@ -246,31 +247,53 @@ else:
 
 st.markdown("---")
 
-# [섹션 1] 기본 정보 (가로 3단)
+# [섹션 1] 학생 기본 정보 (가로 3단)
 st.markdown("#### 1. 학생 기본 정보")
 col_b1, col_b2, col_b3 = st.columns(3)
 
 with col_b1:
-    subject_group = st.selectbox("📚 교과군 선택", ["직접 입력", "국어군", "수학군", "영어군", "사회군", "과학군", "기타(생활/교양/예체능)"])
-    if subject_group != "직접 입력":
-        subject_dropdown = st.selectbox(f"📖 과목명 ({curriculum_version})", ["직접 입력"] + list(current_curriculum_data[subject_group].keys()))
-        if subject_dropdown == "직접 입력":
-            subject = st.text_input("과목명 직접 입력", placeholder="과목명을 입력하세요")
-        else:
-            subject = subject_dropdown
-    else:
-        subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 창의적체험활동- 자율활동, 진로활동")
-
-with col_b2:
     aspiration = st.text_input("🎓 진학 희망 학과/계열 ⭐", placeholder="예: 도시공학과 / 사회학과")
-
+with col_b2:
+    focus = st.selectbox(f"🎯 6대 핵심 역량 ({curriculum_version})", current_competencies)
 with col_b3:
-    focus = st.selectbox(f"🎯 6대 핵심 역량 ({curriculum_version} 기준)", current_competencies)
+    extra = st.text_area("🔍 학생별 개별화 강조 포인트", placeholder="예: 탐구력과 자기주도성 강조, 창의력과 문제해결력 강조", height=68)
 
 st.markdown("---")
 
-# [섹션 2] 구체적인 활동 입력 (가로 2단, 최대 4개)
-st.markdown("#### 2. 구체적인 활동 및 상세 내용 (최대 4개)")
+# [섹션 2] 교과 관련 정보 (가로 3단)
+st.markdown("#### 2. 교과 관련 정보")
+col_s1, col_s2, col_s3 = st.columns([1, 1, 2])
+
+with col_s1:
+    subject_group = st.selectbox("📚 교과군 선택", ["직접 입력", "국어군", "수학군", "영어군", "사회군", "과학군", "기타(생활/교양/예체능)"])
+
+with col_s2:
+    if subject_group != "직접 입력":
+        subject_dropdown = st.selectbox(f"📖 과목명", ["직접 입력"] + list(current_curriculum_data[subject_group].keys()))
+        if subject_dropdown == "직접 입력":
+            subject = st.text_input("과목명 직접 입력", placeholder="과목명을 입력하세요", label_visibility="collapsed")
+        else:
+            subject = subject_dropdown
+    else:
+        subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 창의적체험활동- 자율활동")
+
+with col_s3:
+    # 핵심 아이디어 멀티셀렉트와 수동 입력을 나란히 배치
+    selected_concepts = []
+    if subject_group != "직접 입력" and subject in current_curriculum_data[subject_group]:
+        concept_options = current_curriculum_data[subject_group][subject]
+        selected_concepts = st.multiselect(f"🧠 교과 핵심 아이디어 및 내용 요소", concept_options, placeholder="안내서 기준 핵심 개념을 선택하세요.")
+    
+    manual_keywords = st.text_input("핵심 키워드 직접 입력", placeholder="예: 세계시민역량, 표층순환, 빛과 물질의 이중성 등 (직접 입력 시 작성)")
+    
+    subject_keywords = ", ".join(selected_concepts)
+    if manual_keywords.strip():
+        subject_keywords += (" / " if subject_keywords else "") + manual_keywords.strip()
+
+st.markdown("---")
+
+# [섹션 3] 구체적인 활동 입력 (가로 2단, 최대 4개)
+st.markdown("#### 3. 구체적인 활동 및 상세 내용 (최대 4개)")
 st.caption("진행한 활동의 개수만큼 입력하세요. 입력한 활동의 개수와 내용에 맞춰 목표 바이트에 근접한 문장을 생성합니다.")
 
 col_act1, col_act2 = st.columns(2)
@@ -296,32 +319,6 @@ with col_act2:
     st.markdown("**🔹 활동 4 (선택)**")
     act4_name = st.text_input("활동명 4", placeholder="예: 전공지식 확장을 위한 주제탐구보고서 작성", label_visibility="collapsed")
     act4_desc = st.text_area("활동 4 상세 내용", placeholder="활동 상세 내용 입력", height=100)
-
-st.markdown("---")
-
-# [섹션 3] 추가 반영사항 및 교과 키워드 (가로 2단)
-st.markdown("#### 3. 추가 반영사항 및 핵심 키워드")
-col_add1, col_add2 = st.columns(2)
-
-with col_add1:
-    st.markdown(f"**🧠 교과 핵심 아이디어 및 내용 요소 ({curriculum_version})**")
-    st.caption("해당 교과의 핵심 개념을 선택하거나 직접 입력하세요.")
-    
-    selected_concepts = []
-    if subject_group != "직접 입력" and subject in current_curriculum_data[subject_group]:
-        concept_options = current_curriculum_data[subject_group][subject]
-        selected_concepts = st.multiselect("✅ 핵심 개념 자동 선택", concept_options, placeholder="클릭하여 핵심 개념을 추가하세요.")
-    
-    manual_keywords = st.text_area("핵심 키워드 직접 입력", placeholder="예: 세계시민역량, 표층순환, DNA와 유전자, 빛과 물질의 이중성, 공유결합의 극성", height=70)
-    
-    subject_keywords = ", ".join(selected_concepts)
-    if manual_keywords.strip():
-        subject_keywords += (" / " if subject_keywords else "") + manual_keywords.strip()
-
-with col_add2:
-    st.markdown("**🔍 개별화를 위한 추가 강조 포인트**")
-    st.caption("AI가 특별히 신경 써야 할 학생만의 강점을 적어주세요.")
-    extra = st.text_area("추가 포인트 입력", placeholder="예: 탐구력과 자기주도성 강조, 창의력과 문제해결력 강조", height=138, label_visibility="collapsed")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -362,7 +359,6 @@ if submit:
             - ❌ "○○학과 진학 희망" 직접 선언 금지!
             """ if aspiration.strip() else ""
             
-            # 선택된 핵심 역량이 있을 경우 프롬프트에 반영
             competency_part = f"""
             🌟 교육과정 핵심 역량: '{focus}'
             - 이 역량을 기반으로 학생의 성장을 평가하는 문장을 구성하세요.
@@ -500,7 +496,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v4.2</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v4.3</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
