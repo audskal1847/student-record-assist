@@ -587,6 +587,6 @@ st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
     🏫 <b>학생부 입력 어시스트 시스템 v4.6</b><br>
-    만든이: 신선여자고등학교 김명남<br>
+    만든이: 2026. 신선여고<br>
 </div>
 """, unsafe_allow_html=True)
