@@ -353,17 +353,21 @@ if submit:
             
             aspiration_part = f"""
             🎓 진학 희망: '{aspiration}'
+            - 이 학과·계열 관점에서 활동을 재해석하여 강조
+            - 결말부를 '{aspiration}' 관련 학문적 호기심·후속 탐구 의지로 자연스럽게 마무리
+            - ❌ "○○학과 진학 희망" 직접 선언 금지!
             """ if aspiration.strip() else ""
             
             competency_part = f"""
             🌟 교육과정 핵심 역량: '{focus}'
+            - 이 역량을 기반으로 학생의 성장을 평가하는 문장을 구성하세요.
             """ if focus != "AI에게 알아서 맡기기" else ""
 
             keyword_part = f"""
             🧠 교과 핵심 키워드: {subject_keywords}
+            - 이 핵심 키워드를 단순 나열하지 말고, 뒤에 나오는 구체적인 '활동(활동명)'들의 원동력이 되거나 그 활동들을 관통하는 주제가 되도록 스토리를 묶어주세요.
             """ if subject_keywords.strip() else ""
             
-            # 🔥 3단계 인과 구조 완벽 지시 (가장 핵심적인 변경 사항)
             prompt = f"""당신은 20년 경력의 베테랑 학생부 작성 교사입니다. 아래 학생 데이터를 바탕으로 가장 이상적인 학생부 문장을 작성해 주세요.
 
             🚨 [학생부 서술 3단계 완벽 구조 - 반드시 지킬 것!!!] 🚨
@@ -415,7 +419,7 @@ if submit:
 
             → 줄바꿈 없는 한 단락으로 본문만 출력! 3단계 인과 구조 엄수!"""
             
-            box.warning(f"🤖 '{model_name}'로 최적의 문장 생성 중...")
+            box.warning(f"🤖 최적의 문장 생성 중...")
             response = model.generate_content(prompt)
             result = clean(response.text.strip(), subject)
             cb = byte_count(result)
@@ -457,7 +461,7 @@ if submit:
                     else: break
                 if trimmed: result, cb = trimmed.strip(), byte_count(trimmed)
             
-            box.success(f"✅ 생성 완료! (연결된 AI 모델: {model_name})")
+            box.success(f"✅ 학생 맞춤형 개별 문장 생성이 완료되었습니다!")
             st.subheader(f"📋 최종 생성된 학생부 기록{' - ' + aspiration + ' 맞춤' if aspiration else ''}")
             st.text_area("결과:", value=result, height=250, label_visibility="collapsed")
             
@@ -493,7 +497,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v4.4</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v4.5</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
