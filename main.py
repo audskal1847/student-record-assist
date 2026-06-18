@@ -4,6 +4,42 @@ import PyPDF2, pandas as pd, glob, os, re
 
 st.set_page_config(page_title="개별화된 학생부 입력을 위한 어시스트", layout="wide")
 
+# ===== 0. 교육과정 핵심 개념 데이터베이스 (안내서 기반 추출) =====
+CURRICULUM_DATA = {
+    "국어군": {
+        "국어": ["듣기·말하기의 본질", "읽기의 과정과 방법", "글쓰기의 원리와 과정", "문학의 수용과 생산", "국어의 규범과 변천"],
+        "문학": ["문학의 본질", "문학의 갈래와 역사", "문학과 삶", "문학의 인접 분야", "작품의 맥락"],
+        "독서": ["독서의 본질", "독서의 방법", "독서의 분야", "독서의 태도", "비판적/추론적 읽기"],
+        "화법과 작문": ["화법과 작문의 본질/원리", "정보 전달", "설득", "자기 표현과 사회적 상호작용"]
+    },
+    "수학군": {
+        "수학": ["다항식", "방정식과 부등식", "도형의 방정식", "집합과 명제", "함수와 그래프"],
+        "수학Ⅰ": ["지수함수와 로그함수", "삼각함수", "수열", "수학적 귀납법"],
+        "수학Ⅱ": ["함수의 극한과 연속", "미분", "적분", "다항함수의 미적분"],
+        "확률과 통계": ["경우의 수", "순열과 조합", "확률", "통계", "확률분포와 통계적 추정"],
+        "미적분": ["수열의 극한", "미분법", "적분법", "초월함수의 미적분"]
+    },
+    "영어군": {
+        "영어": ["주제·요지 파악", "세부 정보 파악", "논리적 관계 파악", "맥락 추론", "의사소통 전략"],
+        "영어 회화": ["사실적 이해", "추론적 이해", "종합적 이해", "표현 및 전달"],
+        "영어 독해와 작문": ["글의 구조와 논리", "다양한 목적의 글쓰기", "문화적 배경 이해"]
+    },
+    "사회군": {
+        "통합사회": ["인간, 사회, 환경과 행복", "자연환경과 인간", "생활공간과 사회", "인권 보장과 헌법", "시장 경제와 금융", "사회 정의와 불평등", "문화와 다양성", "글로벌화와 평화"],
+        "한국지리": ["국토 인식과 지리 정보", "지형 환경과 생태계", "기후 환경과 생활", "거주 공간의 변화", "생산과 소비의 공간", "인구 변화와 다문화 공간"],
+        "세계지리": ["세계화와 지역 이해", "세계의 자연환경", "세계의 인문환경", "몬순 아시아와 오세아니아", "건조 아시아와 북부 아프리카", "유럽과 북부 아메리카"],
+        "생활과 윤리": ["현대의 윤리적 문제", "생명과 윤리", "사회와 윤리", "과학과 윤리", "문화와 윤리", "평화와 공존의 윤리"],
+        "사회·문화": ["사회·문화 현상의 탐구", "개인과 사회 구조", "문화와 일상생활", "사회 계층과 불평등", "현대의 사회 변동"]
+    },
+    "과학군": {
+        "통합과학": ["물질의 규칙성", "시스템과 상호작용", "변화와 다양성", "환경과 에너지"],
+        "물리학Ⅰ": ["힘과 운동", "시공간과 새로운 역학", "열과 에너지", "전기와 자기", "파동과 정보 통신", "빛과 물질의 이중성"],
+        "화학Ⅰ": ["화학의 첫걸음", "원자의 세계", "화학 결합과 분자의 세계", "역동적인 화학 반응", "산화 환원과 중화 반응"],
+        "생명과학Ⅰ": ["생명 과학의 이해", "사람의 물질대사", "항상성과 몸의 조절", "방어 작용", "유전", "생태계와 상호 작용"],
+        "지구과학Ⅰ": ["고체 지구", "판구조론과 지각 변동", "대기와 해양", "대기와 해양의 상호 작용", "우주", "별과 외계 행성계"]
+    }
+}
+
 # ===== 1. 데이터 로딩 =====
 @st.cache_data(show_spinner=False)
 def load_pdfs(pdfs):
@@ -143,7 +179,17 @@ st.caption("학생을 설명할 수 있는 핵심 키워드와 희망 진로를 
 st.markdown("#### 1. 학생 기본 정보")
 col_b1, col_b2, col_b3 = st.columns(3)
 with col_b1:
-    subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 교과목- 세계시민과 지리, 물리학1, 창의적체험활동- 자율(자치)활동, 진로활동")
+    # 🔥 교과군/과목 선택 UI 적용
+    subject_group = st.selectbox("📚 교과군 선택", ["직접 입력", "국어군", "수학군", "영어군", "사회군", "과학군"])
+    if subject_group != "직접 입력":
+        subject_dropdown = st.selectbox("📖 과목명", ["직접 입력"] + list(CURRICULUM_DATA[subject_group].keys()))
+        if subject_dropdown == "직접 입력":
+            subject = st.text_input("과목명 직접 입력", placeholder="과목명을 입력하세요")
+        else:
+            subject = subject_dropdown
+    else:
+        subject = st.text_input("📖 과목/활동 영역 (참고용)", placeholder="예: 창의적체험활동- 자율활동, 진로활동")
+
 with col_b2:
     aspiration = st.text_input("🎓 진학 희망 학과/계열 ⭐", placeholder="예: 도시공학과 / 사회학과")
 with col_b3:
@@ -192,13 +238,25 @@ col_add1, col_add2 = st.columns(2)
 
 with col_add1:
     st.markdown("**🧠 교과 핵심 아이디어 및 내용 요소**")
-    st.caption("해당 교과에서 강조하고 싶은 키워드를 입력하세요.")
-    subject_keywords = st.text_area("핵심 키워드 입력", placeholder="예: 세계시민역량, 표층순환, DNA와 유전자, 빛과 물질의 이중성, 공유결합의 극성 ", height=100, label_visibility="collapsed")
+    st.caption("해당 교과의 핵심 개념을 선택하거나 직접 입력하세요.")
+    
+    # 🔥 선택한 과목에 따른 다중 선택 버튼 생성
+    selected_concepts = []
+    if subject_group != "직접 입력" and subject in CURRICULUM_DATA[subject_group]:
+        concept_options = CURRICULUM_DATA[subject_group][subject]
+        selected_concepts = st.multiselect("✅ 핵심 개념 자동 선택 (안내서 기준)", concept_options, placeholder="클릭하여 핵심 개념을 추가하세요.")
+    
+    manual_keywords = st.text_area("핵심 키워드 직접 입력", placeholder="예: 세계시민역량, 표층순환, DNA와 유전자, 빛과 물질의 이중성, 공유결합의 극성", height=70)
+    
+    # 선택된 내용과 직접 입력한 내용을 하나로 합침
+    subject_keywords = ", ".join(selected_concepts)
+    if manual_keywords.strip():
+        subject_keywords += (" / " if subject_keywords else "") + manual_keywords.strip()
 
 with col_add2:
     st.markdown("**🔍 개별화를 위한 추가 강조 포인트**")
     st.caption("AI가 특별히 신경 써야 할 학생만의 강점을 적어주세요.")
-    extra = st.text_area("추가 포인트 입력", placeholder="예: 탐구력과 자기주도성 강조, 창의력과 문제해결력 강조", height=100, label_visibility="collapsed")
+    extra = st.text_area("추가 포인트 입력", placeholder="예: 탐구력과 자기주도성 강조, 창의력과 문제해결력 강조", height=138, label_visibility="collapsed")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -247,7 +305,6 @@ if submit:
             - 이 핵심 키워드를 단순 나열하지 말고, 뒤에 나오는 구체적인 '활동(활동명)'들의 원동력이 되거나 그 활동들을 관통하는 주제가 되도록 스토리를 묶어주세요.
             """ if subject_keywords.strip() else ""
             
-            # 🔥 핵심 변경: 첫 문장 역량 평가형 서술 지시 및 유기적 연계 지시 강화
             prompt = f"""당신은 20년 경력의 베테랑 학생부 작성 교사입니다. 학생 활동 내역을 바탕으로 풍성한 학생부 문장을 작성해 주세요.
 
             🚨🚨🚨 [어투 및 종결어미 절대 규칙] 🚨🚨🚨
@@ -270,9 +327,8 @@ if submit:
             ✅ 대신 "여러 명의", "다수의", "수차례" 등 정성적 표현 사용.
 
             🚨 [기타 절대 금지]
-            1. 과목명('{subject}' 등) 출력 금지
-            2. 마크다운(별표, #, - 등) 사용 금지  
-            3. '학생은/학생이/해당 학생에게서' 등 주어 표현 금지 (한국어 생기부 작성 원칙에 따라 주어는 생략할 것)
+            1. 마크다운(별표, #, - 등) 사용 금지  
+            2. '학생은/학생이/해당 학생에게서' 등 주어 표현 금지 (한국어 생기부 작성 원칙에 따라 주어는 생략할 것)
 
             {aspiration_part}
             {keyword_part}
@@ -303,7 +359,6 @@ if submit:
             result = clean(response.text.strip(), subject)
             cb = byte_count(result)
             
-            # 🔥 핵심 변경: 분량 조절(압축/팽창) 시 첫 문장의 '역량 평가형태 및 연계 유지' 규칙 강력 유지
             if not (target_min <= cb <= target_max):
                 if cb > target_max:
                     box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
@@ -377,7 +432,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v3.5</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v4.0</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
