@@ -4,14 +4,14 @@ import PyPDF2, pandas as pd, glob, os, re
 
 st.set_page_config(page_title="개별화된 학생부 입력을 위한 어시스트", layout="wide")
 
-# ===== 0. 교육과정 데이터베이스 (전 과목 하부 과목 완벽 확장) =====
+# ===== 0. 교육과정 데이터베이스 (2015 vs 2022 분리) =====
 CURRICULUM_DATA_2015 = {
     "국어군": {
-        "국어": ["듣기·말하기", "읽기/쓰기", "문학의 수용과 생산", "국어의 규범과 변천"],
-        "화법과 작문": ["화법의 원리", "토론과 토의", "작문의 과정", "정보 전달과 설득하는 글쓰기"],
-        "독서": ["사실적/추론적 읽기", "비판적/감상적 읽기", "인문/사회/과학/기술/예술 분야의 글 읽기"],
-        "언어와 매체": ["음운과 단어", "문장과 담화", "국어사", "매체 언어의 탐구와 생산"],
-        "문학": ["서정/서사/극/교술 문학", "한국 문학의 흐름", "문학과 삶"],
+        "국어": ["듣기·말하기의 본질", "읽기의 과정과 방법", "글쓰기의 원리와 과정", "문학의 수용과 생산", "국어의 규범과 변천"],
+        "화법과 작문": ["화법과 작문의 본질/원리", "정보 전달", "설득", "자기 표현과 사회적 상호작용"],
+        "독서": ["독서의 본질", "독서의 방법", "독서의 분야", "독서의 태도", "비판적/추론적 읽기"],
+        "언어와 매체": ["음운과 단어", "문장과 담화", "국어사", "매체의 소통 방식", "매체 자료의 수용과 생산"],
+        "문학": ["문학의 본질", "문학의 갈래와 역사", "문학과 삶", "문학의 인접 분야", "작품의 맥락"],
         "실용 국어": ["직무 의사소통", "정보 해석과 조직", "설득과 타협", "실용적 글쓰기"],
         "심화 국어": ["논리적·비판적 사고", "학술적 글쓰기", "문제 해결적 의사소통", "심화 독서"],
         "고전 읽기": ["고전의 가치", "고전과 지혜", "고전의 수용과 재해석"]
@@ -308,7 +308,10 @@ with st.sidebar:
         
     pdf_files = glob.glob("*.pdf")
     if pdf_files:
-        st.success(f"✅ PDF 가이드북 {len(pdf_files)}개 로드")
+        # 🔥 PDF 자동 로드를 제어하는 체크박스로 변경 (기본값 꺼짐)
+        use_pdf = st.checkbox(f"✅ PDF 가이드북 {len(pdf_files)}개 로드 (API 할당량 절약을 위해 평소엔 체크 해제 권장)", value=False)
+    else:
+        use_pdf = False
         
     st.divider()
     st.info("🎯 목표: 1420~1470 바이트")
@@ -436,7 +439,8 @@ if submit:
             model = genai.GenerativeModel(model_name)
             
             verbs = df_verbs.to_string(index=False) if df_verbs is not None else ""
-            pdf_text = load_pdfs(pdf_files)[:3000] if pdf_files else ""
+            # 🔥 PDF가 선택적으로만 텍스트로 넘어가도록 처리
+            pdf_text = load_pdfs(pdf_files)[:3000] if (pdf_files and use_pdf) else ""
             
             target_byte, target_min, target_max = 1445, 1420, 1470
             target_chars = 481
@@ -580,13 +584,13 @@ if submit:
                 
         except Exception as e:
             box.error(f"오류가 발생했습니다: {e}")
-            st.info("💡 API 키 재입력 또는 잠시 후 다시 시도해 주세요.")
+            st.info("💡 API 키 할당량이 초과되었거나 연결에 실패했습니다. 1~2분 후 다시 시도해주세요.")
 
 # ===== 8. 푸터 =====
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
     🏫 <b>학생부 입력 어시스트 시스템 v4.7</b><br>
-    만든이: 신선여고 김명남<br>
+    만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
