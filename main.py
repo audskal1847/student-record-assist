@@ -324,7 +324,7 @@ with st.sidebar:
     st.divider()
     st.info("🎯 목표: 1420~1470 바이트")
     st.caption("🔢 구체적 숫자 자동 제거 적용 중")
-    st.caption("⚡ 무료 한도 큰 모델 우선 + 1회 호출 절감 적용")
+    st.caption("⚡ 무료 한도 큰 모델(flash-lite) 우선 적용")
     
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
@@ -526,17 +526,26 @@ if submit:
             result = clean(response.text.strip(), subject)
             cb = byte_count(result)
             
-            # 🔥 [호출 절감] 나이스 한도(1500바이트)를 '초과'할 때만 1회 재생성(압축).
-            #    1500 이내면 그대로 사용 가능하므로 추가 API 호출을 하지 않음.
-            if cb > NEIS_LIMIT:
-                box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
-                adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요. 
-                🚨 [압축 시 절대 규칙]
-                1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
-                2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
-                3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
-                4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
-                [원본]\n{result}\n→ 본문만 출력!"""
+            if not (target_min <= cb <= target_max):
+                if cb > target_max:
+                    box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요. 
+                    🚨 [압축 시 절대 규칙]
+                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
+                    3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
+                    4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
+                    [원본]\n{result}\n→ 본문만 출력!"""
+                elif cb < target_min:
+                    box.warning(f"📏 분량 확장 중... ({cb}바이트 → 목표 {target_byte})")
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 확장하세요. 
+                    🚨 [확장 시 절대 규칙]
+                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
+                    3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
+                    4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
+                    [원본]\n{result}\n→ 본문만 출력!"""
+                
                 try:
                     new_result = clean(model.generate_content(adj_prompt).text.strip(), subject)
                     new_cb = byte_count(new_result)
@@ -544,13 +553,12 @@ if submit:
                         result, cb = new_result, new_cb
                 except: pass
             
-            # 재생성 후에도 1500 초과 시, API 호출 없이 문장 단위로 잘라 한도 내로 맞춤
-            if cb > NEIS_LIMIT:
+            if cb > target_max:
                 sentences = re.split(r'(?<=[.!?])\s+', result)
                 trimmed = ""
                 for s in sentences:
                     test = trimmed + (" " if trimmed else "") + s
-                    if byte_count(test) <= NEIS_LIMIT:
+                    if byte_count(test) <= target_max:
                         trimmed = test
                     else: break
                 if trimmed: result, cb = trimmed.strip(), byte_count(trimmed)
@@ -567,7 +575,7 @@ if submit:
             if target_min <= cb <= target_max:
                 c_d.metric("✅ 상태", "완벽")
                 st.success("✨ 목표 범위(1420~1470) 완벽 달성! 나이스(NEIS)에 바로 입력할 수 있습니다.")
-            elif cb <= NEIS_LIMIT:
+            elif cb <= 1500:
                 c_d.metric("📝 상태", "사용가능")
                 st.info(f"📝 나이스 한도(1500바이트) 이내입니다. 그대로 사용하셔도 좋습니다.")
             elif cb < target_min:
@@ -591,7 +599,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v4.9</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v5.0</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
