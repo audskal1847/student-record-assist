@@ -451,8 +451,8 @@ if submit:
             # 🔥 PDF가 선택적으로만 텍스트로 넘어가도록 철저히 통제함
             pdf_text = load_pdfs(pdf_files)[:3000] if (pdf_files and use_pdf) else ""
             
-                       target_byte, target_min, target_max = 1445, 1420, 1470
-            target_chars = 481
+    target_byte, target_min, target_max = 1445, 1420, 1470
+    target_chars = 481
 
             
             aspiration_part = f"""
