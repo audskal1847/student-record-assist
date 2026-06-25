@@ -307,10 +307,13 @@ with st.sidebar:
         st.error("❌ data.xlsx 없음")
         
     pdf_files = glob.glob("*.pdf")
+    
+    # 🔥 NameError 원천 차단: 파일 존재 여부와 무관하게 use_pdf 변수를 무조건 안전하게 정의함
     if pdf_files:
-        # 🔥 PDF 자동 로드를 제어하는 체크박스로 변경 (기본값 꺼짐)
-        use_pdf = st.checkbox(f"✅ PDF 가이드북 {len(pdf_files)}개 로드 (API 할당량 절약을 위해 평소엔 체크 해제 권장)", value=False)
+        # 체크박스 제공 (기본값 False로 설정하여 할당량 보호)
+        use_pdf = st.checkbox(f"✅ PDF 가이드북 {len(pdf_files)}개 로드 (할당량 절약 위해 해제 권장)", value=False)
     else:
+        st.success(f"✅ PDF 가이드북 0개 로드")
         use_pdf = False
         
     st.divider()
@@ -439,7 +442,7 @@ if submit:
             model = genai.GenerativeModel(model_name)
             
             verbs = df_verbs.to_string(index=False) if df_verbs is not None else ""
-            # 🔥 PDF가 선택적으로만 텍스트로 넘어가도록 처리
+            # 🔥 PDF가 선택적으로만 텍스트로 넘어가도록 철저히 통제함
             pdf_text = load_pdfs(pdf_files)[:3000] if (pdf_files and use_pdf) else ""
             
             target_byte, target_min, target_max = 1445, 1420, 1470
@@ -590,7 +593,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v4.7</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v4.8</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
