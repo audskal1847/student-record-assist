@@ -451,9 +451,8 @@ if submit:
             # 🔥 PDF가 선택적으로만 텍스트로 넘어가도록 철저히 통제함
             pdf_text = load_pdfs(pdf_files)[:3000] if (pdf_files and use_pdf) else ""
             
-    target_byte, target_min, target_max = 1445, 1420, 1470
-    target_chars = 481
-
+            target_byte, target_min, target_max = 1445, 1420, 1470
+            target_chars = 481
             
             aspiration_part = f"""
             🎓 진학 희망: '{aspiration}'
@@ -523,30 +522,21 @@ if submit:
 
             → 줄바꿈 없는 한 단락으로 본문만 출력! 3단계 인과 구조 엄수!"""
             
-                        response = model.generate_content(prompt)
+            response = model.generate_content(prompt)
             result = clean(response.text.strip(), subject)
             cb = byte_count(result)
             
-            if not (target_min <= cb <= target_max):
-                if cb > target_max:
-                    box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
-                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요. 
-                    🚨 [압축 시 절대 규칙]
-                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
-                    2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
-                    3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
-                    4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
-                    [원본]\n{result}\n→ 본문만 출력!"""
-                elif cb < target_min:
-                    box.warning(f"📏 분량 확장 중... ({cb}바이트 → 목표 {target_byte})")
-                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 확장하세요. 
-                    🚨 [확장 시 절대 규칙]
-                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
-                    2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
-                    3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
-                    4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
-                    [원본]\n{result}\n→ 본문만 출력!"""
-                
+            # 🔥 [호출 절감] 나이스 한도(1500바이트)를 '초과'할 때만 1회 재생성(압축).
+            #    1500 이내면 그대로 사용 가능하므로 추가 API 호출을 하지 않음.
+            if cb > NEIS_LIMIT:
+                box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
+                adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요. 
+                🚨 [압축 시 절대 규칙]
+                1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
+                3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
+                4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
+                [원본]\n{result}\n→ 본문만 출력!"""
                 try:
                     new_result = clean(model.generate_content(adj_prompt).text.strip(), subject)
                     new_cb = byte_count(new_result)
@@ -554,16 +544,16 @@ if submit:
                         result, cb = new_result, new_cb
                 except: pass
             
-            if cb > target_max:
+            # 재생성 후에도 1500 초과 시, API 호출 없이 문장 단위로 잘라 한도 내로 맞춤
+            if cb > NEIS_LIMIT:
                 sentences = re.split(r'(?<=[.!?])\s+', result)
                 trimmed = ""
                 for s in sentences:
                     test = trimmed + (" " if trimmed else "") + s
-                    if byte_count(test) <= target_max:
+                    if byte_count(test) <= NEIS_LIMIT:
                         trimmed = test
                     else: break
                 if trimmed: result, cb = trimmed.strip(), byte_count(trimmed)
-
             
             box.success(f"✅ 학생 맞춤형 개별 문장 생성이 완료되었습니다!")
             st.subheader(f"📋 최종 생성된 학생부 기록{' - ' + aspiration + ' 맞춤' if aspiration else ''}")
