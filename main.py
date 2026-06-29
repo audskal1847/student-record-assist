@@ -672,6 +672,5 @@ st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
     🏫 <b>학생부 입력 어시스트 시스템 v6.1</b><br>
     만든이: 신선여자고등학교 김명남<br>
-    <span style='font-size:13px;'>서술어 편집실(5교과·26역량·780개) 자동 참고판</span>
 </div>
 """, unsafe_allow_html=True)
