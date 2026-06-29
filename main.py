@@ -190,6 +190,7 @@ COMPETENCIES_2022 = ["AI에게 알아서 맡기기", "자기관리 역량", "지
 
 # ===== 0-2. 교과별 핵심역량 서술어 (서술어 편집실 / 2015 개정 기반, 총 780개) =====
 # ※ 과학과 "과학적 참여와 평생 학습 능력" 30개는 동일 형식의 보강 세트입니다.
+# ※ 사용자는 별도 선택 없이, 교과군만 고르면 문장 생성 시 아래 서술어를 AI가 자동 참고합니다.
 PREDICATES_BY_SUBJECT = {
     "국어과": {
         "비판적·창의적 사고 역량": ["비판적으로 분석함", "논리적 허점을 짚어냄", "통념에 의문을 제기함", "다각도로 해석함", "새로운 관점을 제시함", "기존 견해를 재구성함", "독창적 발상을 보임", "근거의 타당성을 검토함", "대안적 시각을 제안함", "창의적으로 재해석함", "모순을 포착함", "행간의 의미를 읽어냄", "숨은 전제를 드러냄", "반례를 들어 반박함", "사고를 확장함", "발상의 전환을 보임", "비판적 거리를 유지함", "통합적으로 사고함", "문제를 새롭게 정의함", "관점을 전복함", "추론의 근거를 명료화함", "함의를 깊이 탐색함", "독자적 견해를 정립함", "다층적으로 분석함", "창발적 아이디어를 도출함", "논점을 예리하게 파고듦", "사고의 깊이를 보여줌", "비판적 안목을 발휘함", "정교한 논리를 구축함", "통찰력 있게 해석함"],
@@ -369,7 +370,7 @@ with st.sidebar:
     st.info("🎯 목표: 1420~1470 바이트")
     st.caption("🔢 구체적 숫자 자동 제거 적용 중")
     st.caption("⚡ 무료 한도 큰 모델(flash-lite) 우선 적용")
-    st.caption("🖋️ 서술어 편집실(780개) 연동")
+    st.caption("🖋️ 서술어 편집실(780개) 자동 참고")
 
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
@@ -434,39 +435,10 @@ with col_s3:
     if manual_keywords.strip():
         subject_keywords += (" / " if subject_keywords else "") + manual_keywords.strip()
 
-# [섹션 2-1] 교과별 핵심역량 서술어 선택 (서술어 편집실 연동)
-if "predicate_basket" not in st.session_state:
-    st.session_state.predicate_basket = []
-
-selected_predicates = []
+# [섹션 2 안내] 서술어 편집실 자동 참고 (선택 단계 없음)
 mapped_subject = GROUP_TO_SUBJECT.get(subject_group)
 if mapped_subject:
-    st.markdown("##### 🖋️ 교과별 핵심역량 서술어 골라 담기 (서술어 편집실)")
-    st.caption(f"'{mapped_subject}'의 핵심역량별 고급 서술어입니다. 활동에 녹여 쓸 표현을 담아 보세요. (담은 표현은 장바구니에 누적됩니다)")
-    comp_dict = PREDICATES_BY_SUBJECT[mapped_subject]
-    col_p1, col_p2 = st.columns([1, 2])
-    with col_p1:
-        sel_comp = st.selectbox("핵심역량 선택", list(comp_dict.keys()), key="pred_comp")
-    with col_p2:
-        picked = st.multiselect(
-            f"'{sel_comp}' 서술어 (여러 개 선택 가능)",
-            comp_dict[sel_comp],
-            placeholder="문장에 녹여 쓸 서술어를 고르세요.",
-            key=f"pred_sel_{mapped_subject}_{sel_comp}",
-        )
-    cba, cbb = st.columns([3, 1])
-    with cba:
-        if st.button("➕ 선택한 서술어 장바구니에 담기", use_container_width=True):
-            for p in picked:
-                if p not in st.session_state.predicate_basket:
-                    st.session_state.predicate_basket.append(p)
-    with cbb:
-        if st.button("🗑️ 장바구니 비우기", use_container_width=True):
-            st.session_state.predicate_basket = []
-
-    if st.session_state.predicate_basket:
-        st.success("🧺 담은 서술어 (" + str(len(st.session_state.predicate_basket)) + "개): " + ", ".join(st.session_state.predicate_basket))
-    selected_predicates = list(st.session_state.predicate_basket)
+    st.caption(f"🖋️ '{mapped_subject}' 핵심역량 고급 서술어가 문장 생성 시 자동으로 참고됩니다. (별도 선택 불필요)")
 elif subject_group == "기타(생활/교양/예체능)":
     st.caption("ℹ️ 서술어 편집실은 국·수·영·사·과 5개 교과를 지원합니다. (기타 교과군은 위의 '핵심 키워드 직접 입력'을 활용하세요.)")
 
@@ -549,13 +521,25 @@ if submit:
             - 이 핵심 키워드를 단순 나열하지 말고, 뒤에 나오는 구체적인 '활동(활동명)'들의 원동력이 되거나 그 활동들을 관통하는 주제가 되도록 스토리를 묶어주세요.
             """ if subject_keywords.strip() else ""
 
-            predicates_str = ", ".join(selected_predicates) if selected_predicates else ""
-            predicate_part = f"""
-            🖋️ 권장 서술어(교과별 핵심역량 기반): {predicates_str}
-            - 위 서술어 표현을 문맥에 맞게 자연스럽게 녹여 쓰되, 단순 나열하지 말 것.
-            - 활동·역량 서술의 핵심 동사/서술 표현으로 활용하여 문장의 완성도를 높일 것.
-            - [문장으로 엮는 법] ① 약한 표현을 강한 표현으로(알게 됨→규명함, 배움→체화함). ② 나열 대신 인과로 연결('~을 계기로 ~을 탐구하여 ~을 도출함'). ③ 역량은 마지막에 '~하는 등 [핵심역량]을 발휘함'으로 닫아 명시할 것.
-            """ if predicates_str.strip() else ""
+            # 🖋️ 교과군에 해당하는 서술어 편집실 표현을 자동으로 참고 자료로 제공 (사용자 선택 불필요)
+            predicate_part = ""
+            _mapped = GROUP_TO_SUBJECT.get(subject_group)
+            if _mapped:
+                _pool_lines = []
+                for _comp, _preds in PREDICATES_BY_SUBJECT[_mapped].items():
+                    _pool_lines.append(f"  · [{_comp}] " + ", ".join(_preds))
+                _predicates_pool = "\n".join(_pool_lines)
+                predicate_part = f"""
+            🖋️ [{_mapped} 핵심역량 고급 서술어 풀 - 자동 참고용]
+            아래는 '{_mapped}'의 역량별 고급 서술어 목록입니다. 이 목록 전체를 무리하게 쓰지 말고,
+            위 활동 내용·핵심 키워드·진로 방향에 가장 잘 맞는 표현을 자연스럽게 골라 문장에 녹여 쓰세요.
+{_predicates_pool}
+            [서술어 활용 원칙]
+            ① 약한 표현을 강한 표현으로(알게 됨→규명함, 배움→체화함).
+            ② 단순 나열 대신 인과로 연결('~을 계기로 ~을 탐구하여 ~을 도출함').
+            ③ 역량은 마지막에 '~하는 등 [핵심역량]을 발휘함'으로 닫아 명시할 것.
+            ④ 위 서술어를 그대로 베껴 붙이지 말고 활동 맥락에 맞게 변형·결합할 것.
+            """
 
             prompt = f"""당신은 20년 경력의 베테랑 학생부 작성 교사입니다. 아래 학생 데이터를 바탕으로 가장 이상적인 학생부 문장을 작성해 주세요.
 
@@ -688,6 +672,6 @@ st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
     🏫 <b>학생부 입력 어시스트 시스템 v6.1</b><br>
     만든이: 신선여자고등학교 김명남<br>
-    <span style='font-size:13px;'>서술어 편집실(5교과·26역량·780개) 연동판</span>
+    <span style='font-size:13px;'>서술어 편집실(5교과·26역량·780개) 자동 참고판</span>
 </div>
 """, unsafe_allow_html=True)
