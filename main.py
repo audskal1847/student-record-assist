@@ -330,8 +330,9 @@ def clean(text, subject=""):
 def byte_count(text):
     return len(text.encode('utf-8'))
 
-# 🔥 구글/오픈라우터 자동 감지 통합 통신 함수 (max_tokens 제한 추가)
+# 🔥 구글/오픈라우터 자동 감지 통합 통신 함수
 def generate_student_record(api_key, prompt_text):
+    # OpenRouter API 키인 경우 (sk-or- 로 시작)
     if api_key.startswith("sk-or-"):
         client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
@@ -339,10 +340,11 @@ def generate_student_record(api_key, prompt_text):
         )
         response = client.chat.completions.create(
             model="google/gemini-2.5-flash",
-            max_tokens=2000, 
             messages=[{"role": "user", "content": prompt_text}]
         )
         return response.choices[0].message.content
+        
+    # Google Native API 키인 경우
     else:
         genai.configure(api_key=api_key)
         models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -365,6 +367,7 @@ def generate_student_record(api_key, prompt_text):
 # ===== 4. 사이드바 =====
 with st.sidebar:
     st.header("🔑 기본 설정")
+    # 🔥 UI 개선: 두 가지 발급 링크 모두 제공 및 통합 입력 안내
     api_key = st.text_input("API 키 입력 (Google 또는 OpenRouter)", type="password")
     st.caption("👇 편하신 곳에서 무료 API 키를 발급받아 입력하세요.")
     st.markdown("[🔗 Google AI Studio 키 발급 (추천)](https://aistudio.google.com/app/apikey)")
@@ -398,10 +401,11 @@ with st.sidebar:
 st.title("📝 학생부 입력 어시스트")
 st.caption("선택한 교육과정과 교과 핵심 키워드를 기반으로 유기적으로 연결된 개별화 학생부 기록이 생성됩니다.")
 
-# 🔥 교육과정 선택 UI 
+# 🔥 교육과정 선택 UI (크고 굵게 강조)
 st.markdown("### 📘 **적용 교육과정 선택**")
 curriculum_version = st.radio("적용 교육과정 선택", ["2015 개정 교육과정", "2022 개정 교육과정"], horizontal=True, label_visibility="collapsed")
 
+# 선택된 교육과정에 따른 변수 할당
 if curriculum_version == "2015 개정 교육과정":
     current_curriculum_data = CURRICULUM_DATA_2015
     current_competencies = COMPETENCIES_2015
@@ -411,7 +415,7 @@ else:
 
 st.markdown("---")
 
-# [섹션 1] 학생 기본 정보
+# [섹션 1] 학생 기본 정보 (가로 3단)
 st.markdown("#### 1. 학생 기본 정보")
 col_b1, col_b2, col_b3 = st.columns(3)
 
@@ -424,7 +428,7 @@ with col_b3:
 
 st.markdown("---")
 
-# [섹션 2] 교과 관련 정보
+# [섹션 2] 교과 관련 정보 (가로 3단)
 st.markdown("#### 2. 교과 관련 정보")
 col_s1, col_s2, col_s3 = st.columns([1, 1, 2])
 
@@ -455,9 +459,9 @@ with col_s3:
 
 st.markdown("---")
 
-# [섹션 3] 구체적인 활동 입력 
+# [섹션 3] 구체적인 활동 입력 (가로 2단, 최대 4개)
 st.markdown("#### 3. 구체적인 활동 및 상세 내용 (최대 4개)")
-st.caption("진행한 활동의 개수만큼 입력하세요. ❗️활동의 구체적인 내용이 절대 누락되지 않도록 모두 반영하여 문장을 생성합니다.")
+st.caption("진행한 활동의 개수만큼 입력하세요. 입력한 활동의 개수와 내용에 맞춰 목표 바이트에 근접한 문장을 생성합니다.")
 
 col_act1, col_act2 = st.columns(2)
 
@@ -488,7 +492,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 submit = st.button("🚀 학생 맞춤형 개별 문장 생성", type="primary", use_container_width=True)
 st.divider()
 
-# ===== 7. 생성 로직 =====
+# ===== 6. 생성 로직 =====
 if submit:
     activities_data = []
     if act1_name.strip() and act1_desc.strip(): activities_data.append(f"[활동명: {act1_name.strip()}]\n- 상세 내용: {act1_desc.strip()}")
@@ -529,34 +533,36 @@ if submit:
             - 이 핵심 키워드를 단순 나열하지 말고, 뒤에 나오는 구체적인 '활동(활동명)'들의 원동력이 되거나 그 활동들을 관통하는 주제가 되도록 스토리를 묶어주세요.
             """ if subject_keywords.strip() else ""
             
-            # 🔥 강력해진 메인 프롬프트 (내용 누락 방지 및 3단계 구조 엄수)
             prompt = f"""당신은 20년 경력의 베테랑 학생부 작성 교사입니다. 아래 학생 데이터를 바탕으로 가장 이상적인 학생부 문장을 작성해 주세요.
 
-            🚨 [학생부 서술 3단계 완벽 구조 및 모든 활동 반영 - 반드시 지킬 것!!!] 🚨
+            🚨 [학생부 서술 3단계 완벽 구조 - 반드시 지킬 것!!!] 🚨
+            대학 입학사정관이 가장 선호하는 형태인 "교과 ➡️ 활동 ➡️ 진로"의 유기적 연계 구조로 작성하세요.
+
             1. 도입부 (교과 기반 역량 평가):
                - 첫 문장은 반드시 제공된 [교과 핵심 키워드] 및 [핵심 역량]을 활용하여, "학생이 교과 핵심 개념인 ~에 대한 깊은 이해를 바탕으로 ~한 역량이 우수함(충분함)"이라는 식의 명확한 '역량 평가' 문장으로 시작하세요. (사전적 정의 형태 절대 금지)
             
-            2. 전개부 (모든 활동의 구체적 반영 및 유기적 연계):
-               - 🚨 [가장 중요] 입력된 {num_activities}개의 활동은 단 하나도 누락해선 안 됩니다!
-               - 각 활동의 '상세 내용'에 적힌 학생의 구체적인 역할, 탐구 과정, 성취를 단순 요약하지 말고, 깊이 있게 모두 서술하세요.
-               - 도입부의 역량과 이어지는 활동들이 꼬리에 꼬리를 무는 형태로 자연스럽게 연결되어야 합니다. (예: "이러한 역량을 토대로 '[활동명]'에 참여하여...")
+            2. 전개부 (역량과 활동의 유기적 연계):
+               - 앞서 언급한 교과 역량과 지적 호기심이 뒤따르는 구체적인 [활동명]으로 어떻게 이어졌는지 자연스럽게 연결하세요. 
+               - 예: "이러한 역량을 토대로 '[활동명]'에 참여하여..." 혹은 "이 개념에 대한 호기심을 바탕으로 '[활동명]'을 주도하며..."
+               - 앞 문장과 뒤 문장이 뚝뚝 끊어지지 않고 반드시 하나의 스토리(인과관계)로 이어져야 합니다.
 
             3. 결속 및 마무리 (진로 연계의 의미 부여):
-               - 마지막 문장은 학생의 활동 결과물이 지원 희망하는 [진학 희망 학과/계열]의 특성에 완벽히 부합하며 유의미한 성취를 이루었다는 식으로 매듭지으세요. ("○○학과 진학을 희망함" 식의 직접 선언 금지)
+               - 마지막 문장은 학생의 이러한 구체적이고 개별적인 활동 결과물이 지원 희망하는 [진학 희망 학과/계열]의 특성에 완벽히 부합하며, 그렇기에 매우 유의미한 학업적 성취를 이루었다는 식으로 매듭지으세요. 
+               - 단, "○○학과 진학을 희망함" 식의 일차원적 직접 선언은 절대 금지합니다.
 
             🚨🚨🚨 [어투 및 종결어미 절대 규칙] 🚨🚨🚨
-            모든 문장의 끝은 무조건 '~함', '~임', '~됨'으로 끝나는 개조식(명사형) 종결어미로 작성하세요! 서술형 어미('~습니다', '~다' 등) 절대 금지.
+            모든 문장의 끝은 무조건 '~함', '~임', '~됨'으로 끝나는 개조식(명사형) 종결어미로 작성하세요!
+            ❌ 금지: '~습니다', '~해요', '~다' 등 서술형 어미 절대 금지.
 
-            🚨 [필수 분량 및 글자 수 강제] 
-            - 한글 공백 포함 480~500자 (1420~1470바이트) 분량을 무조건 꽉 채워야 합니다! 짧게 끝내지 마세요.
-            - 활동의 구체적인 과정을 자세히 묘사하여 분량을 충분히 확보하세요.
-            - 반드시 하나의 단락으로 작성(엔터/줄바꿈 금지).
-
-            🚨 [기타 금지 규칙]
-            1. 구체적 숫자(예: "7명", "3차례") 금지. "여러 명의", "다수의" 등 정성적 표현 사용.
+            🚨 [기타 절대 금지 규칙]
+            1. 구체적 숫자(예: "주민 7명", "3차례 회의") 절대 금지! ✅ 대신 "여러 명의", "다수의" 등 정성적 표현 사용.
             2. 마크다운 기호(별표, #, - 등) 사용 금지.
-            3. '학생은/해당 학생에게서' 등 주어 표현 금지.
-            4. 활동명은 반드시 작은따옴표('')로 묶어 원래 이름 그대로 출력할 것.
+            3. '학생은/학생이/해당 학생에게서' 등 주어 표현 금지.
+            4. 활동명은 반드시 작은따옴표('')로 묶어서 원래 이름 그대로 출력할 것.
+
+            🚨 [필수 분량] 
+            - 한글 정확히 {target_chars}자(±8자) / 1420~1470바이트 이내.
+            - 반드시 하나의 단락으로 작성(엔터/줄바꿈 금지).
 
             [학생 기본 데이터]
             - 적용 교육과정: {curriculum_version}
@@ -564,69 +570,53 @@ if submit:
             {aspiration_part}
             {keyword_part}
 
-            [활동 내역 및 세부 내용] (총 {num_activities}개 - 절대 누락 금지)
+            [활동 내역 및 세부 내용] (총 {num_activities}개)
             {activities_str}
 
             [참고: 권장 동사]
             {verbs}
+
+            [참고: PDF 가이드북 내용 일부]
+            {pdf_text}
             
             [추가 지시]
             {extra if extra else "없음"}
 
-            → 줄바꿈 없는 한 단락으로 본문만 출력! 모든 활동 상세내용 100% 반영!"""
+            → 줄바꿈 없는 한 단락으로 본문만 출력! 3단계 인과 구조 엄수!"""
             
+            # 🔥 통합 통신 함수 사용
             raw_response = generate_student_record(api_key, prompt)
             result = clean(raw_response.strip(), subject)
             cb = byte_count(result)
             
-            # 🔥 2단계 정밀 분량 조절 루프 (최대 2회 시도)
-            for attempt in range(2):
-                if target_min <= cb <= target_max:
-                    break
-                    
+            if not (target_min <= cb <= target_max):
                 if cb > target_max:
-                    box.warning(f"📏 분량 압축 중... (현재 {cb}바이트 / 재교정 시도 {attempt+1}/2)")
-                    adj_prompt = f"""아래 원본 문장의 분량이 너무 깁니다. 한글 공백 포함 {target_chars}자 (약 1450바이트) 분량으로 압축하세요. 
+                    box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요. 
                     🚨 [압축 시 절대 규칙]
-                    1. 분량 줄이기: 구체적인 활동의 뼈대와 3단계 구조는 유지하되, 불필요한 수식어나 중복되는 표현을 제거하여 길이를 줄이세요. (핵심 활동 내용은 절대 지우지 마세요)
-                    2. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
                     3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
-                    
-                    [누락 확인용 원본 활동 데이터]
-                    {activities_str}
-                    
-                    [현재 생성된 문장]
-                    {result}
-                    
-                    → 본문만 출력!"""
+                    4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
+                    [원본]\n{result}\n→ 본문만 출력!"""
                 elif cb < target_min:
-                    box.warning(f"📏 분량 확장 중... (현재 {cb}바이트 / 재교정 시도 {attempt+1}/2)")
-                    adj_prompt = f"""아래 원본 문장의 분량이 너무 짧습니다. 한글 공백 포함 {target_chars}자 (약 1450바이트) 분량이 되도록 내용을 대폭 확장하세요. 
+                    box.warning(f"📏 분량 확장 중... ({cb}바이트 → 목표 {target_byte})")
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 확장하세요. 
                     🚨 [확장 시 절대 규칙]
-                    1. 분량 늘리기: 함께 제공된 [원본 활동 데이터]를 꼼꼼히 다시 읽고, 현재 문장에서 누락되었거나 축약된 활동 상세 내용(특히 탐구 과정, 학생의 역할 등)을 구체적인 행동 묘사로 덧붙여서 길이를 확실하게 늘리세요.
-                    2. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
+                    2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
                     3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
-                    
-                    [누락 확인용 원본 활동 데이터]
-                    {activities_str}
-                    
-                    [현재 생성된 문장]
-                    {result}
-                    
-                    → 본문만 출력!"""
+                    4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
+                    [원본]\n{result}\n→ 본문만 출력!"""
                 
                 try:
                     adj_raw_response = generate_student_record(api_key, adj_prompt)
                     new_result = clean(adj_raw_response.strip(), subject)
                     new_cb = byte_count(new_result)
-                    
-                    # 이전 결과보다 목표치에 더 가까워졌다면 업데이트
-                    if abs(new_cb - target_byte) < abs(cb - target_byte) or (target_min <= new_cb <= target_max):
-                        result = new_result
-                        cb = new_cb
+                    if abs(new_cb - target_byte) < abs(cb - target_byte):
+                        result, cb = new_result, new_cb
                 except: pass
             
-            # 최종 마무리 정리 (한도 초과 시 문장 단위로 자르기)
             if cb > target_max:
                 sentences = re.split(r'(?<=[.!?])\s+', result)
                 trimmed = ""
@@ -654,7 +644,7 @@ if submit:
                 st.info(f"📝 나이스 한도(1500바이트) 이내입니다. 그대로 사용하셔도 좋습니다.")
             elif cb < target_min:
                 c_d.metric("⚠️ 상태", f"부족 (-{target_min - cb})")
-                st.warning(f"⚠️ 목표보다 {target_min - cb}바이트 부족합니다. AI가 2회 재교정을 시도했으나 분량 확보에 실패했습니다. 활동 내용을 조금 더 추가해 주세요.")
+                st.warning(f"⚠️ 목표보다 {target_min - cb}바이트 부족합니다. 추가 내용을 넣어 다시 생성해 보세요.")
             else:
                 c_d.metric("⚠️ 상태", "초과")
                 st.error("⚠️ 한도 초과! 활동 내용을 조금 줄여서 다시 생성해 주세요.")
@@ -663,7 +653,7 @@ if submit:
             if remaining_numbers:
                 st.warning(f"⚠️ 시스템이 수치를 정성적으로 치환했으나, 일부 숫자 표현이 남아있을 수 있습니다: {', '.join(remaining_numbers[:5])} - 확인 후 직접 수정해 주세요.")
             else:
-                st.info("✅ 모든 활동 디테일이 반영된 3단계 구조의 완벽한 문장이 작성되었습니다!")
+                st.info("✅ '교과 역량 ➡️ 심화 탐구(활동) ➡️ 진로 의미'가 완벽하게 연계된 3단계 구조로 작성되었습니다!")
                 
         except Exception as e:
             box.error(f"오류가 발생했습니다: {e}")
@@ -673,7 +663,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v5.3</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v5.1</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
