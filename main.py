@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+from openai import OpenAI
 import PyPDF2, pandas as pd, glob, os, re
 
 st.set_page_config(page_title="개별화된 학생부 입력을 위한 어시스트", layout="wide")
@@ -256,23 +257,7 @@ def load_excel():
         return g, v
     except: return None, None
 
-# ===== 2. AI 모델 자동 탐색 (무료 한도 큰 모델 우선) =====
-def find_model(api_key):
-    genai.configure(api_key=api_key)
-    models = [m.name.replace("models/", "") for m in genai.list_models()
-              if 'generateContent' in m.supported_generation_methods]
-    for keys in [("2.5", "flash", "lite"),
-                 ("flash", "lite"),
-                 ("2.0", "flash", "lite"),
-                 ("2.0", "flash"),
-                 ("2.5", "flash"),
-                 ("flash",), ("pro",)]:
-        for m in models:
-            if any(s in m for s in ["vision","embedding","exp","thinking","tts","image"]): continue
-            if all(k in m for k in keys): return m
-    return models[0] if models else None
-
-# ===== 3. 구체적 숫자 자동 치환 =====
+# ===== 2. 구체적 숫자 자동 치환 =====
 def remove_numbers(text):
     text = re.sub(r'약\s*\d+\s*여?\s*명의?', '여러 명의', text)
     text = re.sub(r'약\s*\d+\s*여?\s*곳을?', '여러 곳을', text)
@@ -326,7 +311,7 @@ def remove_numbers(text):
     text = re.sub(r'\s+\.', '.', text)
     return text
 
-# ===== 4. 결과 정화 =====
+# ===== 3. 결과 정화 =====
 def clean(text, subject=""):
     for pat in [r'\*\*(.*?)\*\*', r'\*(.*?)\*', r'__(.*?)__', r'`(.*?)`']:
         text = re.sub(pat, r'\1', text)
@@ -345,45 +330,82 @@ def clean(text, subject=""):
 def byte_count(text):
     return len(text.encode('utf-8'))
 
-# ===== 5. 사이드바 =====
+# 🔥 구글/오픈라우터 자동 감지 통합 통신 함수
+def generate_student_record(api_key, prompt_text):
+    # OpenRouter API 키인 경우 (sk-or- 로 시작)
+    if api_key.startswith("sk-or-"):
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
+        response = client.chat.completions.create(
+            model="google/gemini-2.5-flash",
+            messages=[{"role": "user", "content": prompt_text}]
+        )
+        return response.choices[0].message.content
+        
+    # Google Native API 키인 경우
+    else:
+        genai.configure(api_key=api_key)
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        target_model = models[0] if models else "gemini-1.5-flash"
+        for keys in [("2.5", "flash"), ("2.0", "flash"), ("1.5", "flash")]:
+            found = False
+            for m in models:
+                if any(s in m for s in ["vision", "embedding", "exp", "thinking", "tts", "image"]): continue
+                if all(k in m for k in keys):
+                    target_model = m
+                    found = True
+                    break
+            if found: break
+            
+        model = genai.GenerativeModel(target_model)
+        response = model.generate_content(prompt_text)
+        return response.text
+
+# ===== 4. 사이드바 =====
 with st.sidebar:
     st.header("🔑 기본 설정")
-    api_key = st.text_input("Google AI API 키", type="password")
-    st.markdown("[🔗 무료 API 키 발급](https://aistudio.google.com/app/apikey)")
+    # 🔥 UI 개선: 두 가지 발급 링크 모두 제공 및 통합 입력 안내
+    api_key = st.text_input("API 키 입력 (Google 또는 OpenRouter)", type="password")
+    st.caption("👇 편하신 곳에서 무료 API 키를 발급받아 입력하세요.")
+    st.markdown("[🔗 Google AI Studio 키 발급 (추천)](https://aistudio.google.com/app/apikey)")
+    st.markdown("[🔗 OpenRouter 키 발급](https://openrouter.ai/keys)")
     st.divider()
-
+    
     df_guide, df_verbs = load_excel()
     if df_guide is not None:
         st.success(f"✅ 엑셀 사전 로드 (동사 {len(df_verbs)}개 활용)")
     else:
         st.error("❌ data.xlsx 없음")
-
+        
     pdf_files = glob.glob("*.pdf")
-
+    
     if pdf_files:
         use_pdf = st.checkbox(f"✅ PDF 가이드북 {len(pdf_files)}개 로드 (할당량 절약 위해 해제 권장)", value=False)
     else:
         st.success(f"✅ PDF 가이드북 0개 로드")
         use_pdf = False
-
+        
     st.divider()
     st.info("🎯 목표: 1420~1470 바이트")
     st.caption("🔢 구체적 숫자 자동 제거 적용 중")
-    st.caption("⚡ 무료 한도 큰 모델(flash-lite) 우선 적용")
-    st.caption("🖋️ 서술어 편집실(780개) 자동 참고")
-
+    
     st.markdown("---")
     st.markdown("### 📥 자료실 및 관련 링크")
     st.link_button("📖 2026 교과 선택 가이드북", "https://ebook.dsummer.co.kr/books/yxly/#p=1", use_container_width=True)
     st.link_button("📄 2025 교과 선택 가이드북", "https://books.dsummer.co.kr/books/lfyk/#p=1", use_container_width=True)
 
-# ===== 6. 메인 화면 =====
+# ===== 5. 메인 화면 =====
 st.title("📝 학생부 입력 어시스트")
 st.caption("선택한 교육과정과 교과 핵심 키워드를 기반으로 유기적으로 연결된 개별화 학생부 기록이 생성됩니다.")
 
+# 🔥 교육과정 선택 UI (크고 굵게 강조)
 st.markdown("### 📘 **적용 교육과정 선택**")
 curriculum_version = st.radio("적용 교육과정 선택", ["2015 개정 교육과정", "2022 개정 교육과정"], horizontal=True, label_visibility="collapsed")
 
+# 선택된 교육과정에 따른 변수 할당
 if curriculum_version == "2015 개정 교육과정":
     current_curriculum_data = CURRICULUM_DATA_2015
     current_competencies = COMPETENCIES_2015
@@ -428,19 +450,12 @@ with col_s3:
     if subject_group != "직접 입력" and subject in current_curriculum_data[subject_group]:
         concept_options = current_curriculum_data[subject_group][subject]
         selected_concepts = st.multiselect(f"🧠 교과 핵심 아이디어 및 내용 요소", concept_options, placeholder="안내서 기준 핵심 개념을 선택하세요.")
-
+    
     manual_keywords = st.text_input("핵심 키워드 직접 입력", placeholder="예: 세계시민역량, 표층순환, 빛과 물질의 이중성 등 (직접 입력 시 작성)")
-
+    
     subject_keywords = ", ".join(selected_concepts)
     if manual_keywords.strip():
         subject_keywords += (" / " if subject_keywords else "") + manual_keywords.strip()
-
-# [섹션 2 안내] 서술어 편집실 자동 참고 (선택 단계 없음)
-mapped_subject = GROUP_TO_SUBJECT.get(subject_group)
-if mapped_subject:
-    st.caption(f"🖋️ '{mapped_subject}' 핵심역량 고급 서술어가 문장 생성 시 자동으로 참고됩니다. (별도 선택 불필요)")
-elif subject_group == "기타(생활/교양/예체능)":
-    st.caption("ℹ️ 서술어 편집실은 국·수·영·사·과 5개 교과를 지원합니다. (기타 교과군은 위의 '핵심 키워드 직접 입력'을 활용하세요.)")
 
 st.markdown("---")
 
@@ -454,9 +469,9 @@ with col_act1:
     st.markdown("**🔹 활동 1 (필수)**")
     act1_name = st.text_input("활동명 1", placeholder="예: 커뮤니티 매핑 지도 만들기", label_visibility="collapsed")
     act1_desc = st.text_area("활동 1 상세 내용", placeholder="위 활동에 대한 구체적인 역할, 성취 등을 입력하세요.", height=100)
-
+    
     st.markdown("<br>", unsafe_allow_html=True)
-
+    
     st.markdown("**🔹 활동 3 (선택)**")
     act3_name = st.text_input("활동명 3", placeholder="예: 기후 변화 대응 캠페인", label_visibility="collapsed")
     act3_desc = st.text_area("활동 3 상세 내용", placeholder="활동 상세 내용 입력", height=100)
@@ -465,9 +480,9 @@ with col_act2:
     st.markdown("**🔹 활동 2 (선택)**")
     act2_name = st.text_input("활동명 2", placeholder="예: 지속가능한 도시 개발 보고서 작성", label_visibility="collapsed")
     act2_desc = st.text_area("활동 2 상세 내용", placeholder="활동 상세 내용 입력", height=100)
-
+    
     st.markdown("<br>", unsafe_allow_html=True)
-
+    
     st.markdown("**🔹 활동 4 (선택)**")
     act4_name = st.text_input("활동명 4", placeholder="예: 전공지식 확장을 위한 주제탐구보고서 작성", label_visibility="collapsed")
     act4_desc = st.text_area("활동 4 상세 내용", placeholder="활동 상세 내용 입력", height=100)
@@ -477,14 +492,14 @@ st.markdown("<br>", unsafe_allow_html=True)
 submit = st.button("🚀 학생 맞춤형 개별 문장 생성", type="primary", use_container_width=True)
 st.divider()
 
-# ===== 7. 생성 로직 =====
+# ===== 6. 생성 로직 =====
 if submit:
     activities_data = []
     if act1_name.strip() and act1_desc.strip(): activities_data.append(f"[활동명: {act1_name.strip()}]\n- 상세 내용: {act1_desc.strip()}")
     if act2_name.strip() and act2_desc.strip(): activities_data.append(f"[활동명: {act2_name.strip()}]\n- 상세 내용: {act2_desc.strip()}")
     if act3_name.strip() and act3_desc.strip(): activities_data.append(f"[활동명: {act3_name.strip()}]\n- 상세 내용: {act3_desc.strip()}")
     if act4_name.strip() and act4_desc.strip(): activities_data.append(f"[활동명: {act4_name.strip()}]\n- 상세 내용: {act4_desc.strip()}")
-
+        
     num_activities = len(activities_data)
     activities_str = "\n\n".join(activities_data)
 
@@ -494,23 +509,20 @@ if submit:
         box = st.empty()
         try:
             box.info("🔍 최적의 문장 생성 중...")
-            model_name = find_model(api_key)
-            if not model_name: raise Exception("사용 가능한 모델 없음")
-            model = genai.GenerativeModel(model_name)
-
+            
             verbs = df_verbs.to_string(index=False) if df_verbs is not None else ""
             pdf_text = load_pdfs(pdf_files)[:3000] if (pdf_files and use_pdf) else ""
-
+            
             target_byte, target_min, target_max = 1445, 1420, 1470
             target_chars = 481
-
+            
             aspiration_part = f"""
             🎓 진학 희망: '{aspiration}'
             - 이 학과·계열 관점에서 활동을 재해석하여 강조
             - 결말부를 '{aspiration}' 관련 학문적 호기심·후속 탐구 의지로 자연스럽게 마무리
             - ❌ "○○학과 진학 희망" 직접 선언 금지!
             """ if aspiration.strip() else ""
-
+            
             competency_part = f"""
             🌟 교육과정 핵심 역량: '{focus}'
             - 이 역량을 기반으로 학생의 성장을 평가하는 문장을 구성하세요.
@@ -520,27 +532,7 @@ if submit:
             🧠 교과 핵심 키워드: {subject_keywords}
             - 이 핵심 키워드를 단순 나열하지 말고, 뒤에 나오는 구체적인 '활동(활동명)'들의 원동력이 되거나 그 활동들을 관통하는 주제가 되도록 스토리를 묶어주세요.
             """ if subject_keywords.strip() else ""
-
-            # 🖋️ 교과군에 해당하는 서술어 편집실 표현을 자동으로 참고 자료로 제공 (사용자 선택 불필요)
-            predicate_part = ""
-            _mapped = GROUP_TO_SUBJECT.get(subject_group)
-            if _mapped:
-                _pool_lines = []
-                for _comp, _preds in PREDICATES_BY_SUBJECT[_mapped].items():
-                    _pool_lines.append(f"  · [{_comp}] " + ", ".join(_preds))
-                _predicates_pool = "\n".join(_pool_lines)
-                predicate_part = f"""
-            🖋️ [{_mapped} 핵심역량 고급 서술어 풀 - 자동 참고용]
-            아래는 '{_mapped}'의 역량별 고급 서술어 목록입니다. 이 목록 전체를 무리하게 쓰지 말고,
-            위 활동 내용·핵심 키워드·진로 방향에 가장 잘 맞는 표현을 자연스럽게 골라 문장에 녹여 쓰세요.
-{_predicates_pool}
-            [서술어 활용 원칙]
-            ① 약한 표현을 강한 표현으로(알게 됨→규명함, 배움→체화함).
-            ② 단순 나열 대신 인과로 연결('~을 계기로 ~을 탐구하여 ~을 도출함').
-            ③ 역량은 마지막에 '~하는 등 [핵심역량]을 발휘함'으로 닫아 명시할 것.
-            ④ 위 서술어를 그대로 베껴 붙이지 말고 활동 맥락에 맞게 변형·결합할 것.
-            """
-
+            
             prompt = f"""당신은 20년 경력의 베테랑 학생부 작성 교사입니다. 아래 학생 데이터를 바탕으로 가장 이상적인 학생부 문장을 작성해 주세요.
 
             🚨 [학생부 서술 3단계 완벽 구조 - 반드시 지킬 것!!!] 🚨
@@ -548,14 +540,14 @@ if submit:
 
             1. 도입부 (교과 기반 역량 평가):
                - 첫 문장은 반드시 제공된 [교과 핵심 키워드] 및 [핵심 역량]을 활용하여, "학생이 교과 핵심 개념인 ~에 대한 깊은 이해를 바탕으로 ~한 역량이 우수함(충분함)"이라는 식의 명확한 '역량 평가' 문장으로 시작하세요. (사전적 정의 형태 절대 금지)
-
+            
             2. 전개부 (역량과 활동의 유기적 연계):
-               - 앞서 언급한 교과 역량과 지적 호기심이 뒤따르는 구체적인 [활동명]으로 어떻게 이어졌는지 자연스럽게 연결하세요.
+               - 앞서 언급한 교과 역량과 지적 호기심이 뒤따르는 구체적인 [활동명]으로 어떻게 이어졌는지 자연스럽게 연결하세요. 
                - 예: "이러한 역량을 토대로 '[활동명]'에 참여하여..." 혹은 "이 개념에 대한 호기심을 바탕으로 '[활동명]'을 주도하며..."
                - 앞 문장과 뒤 문장이 뚝뚝 끊어지지 않고 반드시 하나의 스토리(인과관계)로 이어져야 합니다.
 
             3. 결속 및 마무리 (진로 연계의 의미 부여):
-               - 마지막 문장은 학생의 이러한 구체적이고 개별적인 활동 결과물이 지원 희망하는 [진학 희망 학과/계열]의 특성에 완벽히 부합하며, 그렇기에 매우 유의미한 학업적 성취를 이루었다는 식으로 매듭지으세요.
+               - 마지막 문장은 학생의 이러한 구체적이고 개별적인 활동 결과물이 지원 희망하는 [진학 희망 학과/계열]의 특성에 완벽히 부합하며, 그렇기에 매우 유의미한 학업적 성취를 이루었다는 식으로 매듭지으세요. 
                - 단, "○○학과 진학을 희망함" 식의 일차원적 직접 선언은 절대 금지합니다.
 
             🚨🚨🚨 [어투 및 종결어미 절대 규칙] 🚨🚨🚨
@@ -568,7 +560,7 @@ if submit:
             3. '학생은/학생이/해당 학생에게서' 등 주어 표현 금지.
             4. 활동명은 반드시 작은따옴표('')로 묶어서 원래 이름 그대로 출력할 것.
 
-            🚨 [필수 분량]
+            🚨 [필수 분량] 
             - 한글 정확히 {target_chars}자(±8자) / 1420~1470바이트 이내.
             - 반드시 하나의 단락으로 작성(엔터/줄바꿈 금지).
 
@@ -577,7 +569,6 @@ if submit:
             {competency_part}
             {aspiration_part}
             {keyword_part}
-            {predicate_part}
 
             [활동 내역 및 세부 내용] (총 {num_activities}개)
             {activities_str}
@@ -587,20 +578,21 @@ if submit:
 
             [참고: PDF 가이드북 내용 일부]
             {pdf_text}
-
+            
             [추가 지시]
             {extra if extra else "없음"}
 
             → 줄바꿈 없는 한 단락으로 본문만 출력! 3단계 인과 구조 엄수!"""
-
-            response = model.generate_content(prompt)
-            result = clean(response.text.strip(), subject)
+            
+            # 🔥 통합 통신 함수 사용
+            raw_response = generate_student_record(api_key, prompt)
+            result = clean(raw_response.strip(), subject)
             cb = byte_count(result)
-
+            
             if not (target_min <= cb <= target_max):
                 if cb > target_max:
                     box.warning(f"📏 분량 압축 중... ({cb}바이트 → 목표 {target_byte})")
-                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요.
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 압축하세요. 
                     🚨 [압축 시 절대 규칙]
                     1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
                     2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
@@ -609,21 +601,22 @@ if submit:
                     [원본]\n{result}\n→ 본문만 출력!"""
                 elif cb < target_min:
                     box.warning(f"📏 분량 확장 중... ({cb}바이트 → 목표 {target_byte})")
-                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 확장하세요.
+                    adj_prompt = f"""아래 원본 문장을 한글 {target_chars}자 분량으로 확장하세요. 
                     🚨 [확장 시 절대 규칙]
                     1. 모든 문장 끝은 무조건 '~함', '~임' 명사형 종결어미 유지.
                     2. 첫 문장(교과 핵심 개념 바탕 역량 우수함) ➡️ 중간(그 역량을 바탕으로 '[활동명]' 참여) ➡️ 끝 문장(희망 전공 특성에 부합하는 유의미한 결과)의 **3단계 인과 구조와 스토리텔링을 절대 훼손하지 말고 그대로 유지할 것.**
                     3. 작은따옴표('')로 묶인 고유 활동명은 원문 그대로 반드시 보존할 것.
                     4. 문장이 단답형으로 툭툭 끊기지 않게 연결어미 활용. 구체적 숫자 금지.
                     [원본]\n{result}\n→ 본문만 출력!"""
-
+                
                 try:
-                    new_result = clean(model.generate_content(adj_prompt).text.strip(), subject)
+                    adj_raw_response = generate_student_record(api_key, adj_prompt)
+                    new_result = clean(adj_raw_response.strip(), subject)
                     new_cb = byte_count(new_result)
                     if abs(new_cb - target_byte) < abs(cb - target_byte):
                         result, cb = new_result, new_cb
                 except: pass
-
+            
             if cb > target_max:
                 sentences = re.split(r'(?<=[.!?])\s+', result)
                 trimmed = ""
@@ -633,16 +626,16 @@ if submit:
                         trimmed = test
                     else: break
                 if trimmed: result, cb = trimmed.strip(), byte_count(trimmed)
-
+            
             box.success(f"✅ 학생 맞춤형 개별 문장 생성이 완료되었습니다!")
             st.subheader(f"📋 최종 생성된 학생부 기록{' - ' + aspiration + ' 맞춤' if aspiration else ''}")
             st.text_area("결과:", value=result, height=250, label_visibility="collapsed")
-
+            
             c_a, c_b, c_c, c_d = st.columns(4)
             c_a.metric("📊 글자수", f"{len(result)}자")
             c_b.metric("💾 바이트", f"{cb}byte")
             c_c.metric("🎯 목표구간", "1420~1470")
-
+            
             if target_min <= cb <= target_max:
                 c_d.metric("✅ 상태", "완벽")
                 st.success("✨ 목표 범위(1420~1470) 완벽 달성! 나이스(NEIS)에 바로 입력할 수 있습니다.")
@@ -655,22 +648,22 @@ if submit:
             else:
                 c_d.metric("⚠️ 상태", "초과")
                 st.error("⚠️ 한도 초과! 활동 내용을 조금 줄여서 다시 생성해 주세요.")
-
+            
             remaining_numbers = re.findall(r'\d+\s*(?:명|곳|장|편|권|회|개|건|종|차례|번|점포|군데|가지|시간)', result)
             if remaining_numbers:
                 st.warning(f"⚠️ 시스템이 수치를 정성적으로 치환했으나, 일부 숫자 표현이 남아있을 수 있습니다: {', '.join(remaining_numbers[:5])} - 확인 후 직접 수정해 주세요.")
             else:
                 st.info("✅ '교과 역량 ➡️ 심화 탐구(활동) ➡️ 진로 의미'가 완벽하게 연계된 3단계 구조로 작성되었습니다!")
-
+                
         except Exception as e:
             box.error(f"오류가 발생했습니다: {e}")
-            st.info("💡 API 키 할당량이 초과되었거나 연결에 실패했습니다. 1~2분 후 다시 시도해주세요.")
+            st.info("💡 입력하신 API 키의 형태가 올바른지, 혹은 할당량이 초과되지 않았는지 확인해주세요.")
 
 # ===== 8. 푸터 =====
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v6.1</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v5.1</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
