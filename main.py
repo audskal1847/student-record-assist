@@ -330,7 +330,7 @@ def clean(text, subject=""):
 def byte_count(text):
     return len(text.encode('utf-8'))
 
-# 🔥 구글/오픈라우터 자동 감지 통합 통신 함수
+# 🔥 구글/오픈라우터 자동 감지 통합 통신 함수 (max_tokens 제한 추가)
 def generate_student_record(api_key, prompt_text):
     # OpenRouter API 키인 경우 (sk-or- 로 시작)
     if api_key.startswith("sk-or-"):
@@ -340,6 +340,7 @@ def generate_student_record(api_key, prompt_text):
         )
         response = client.chat.completions.create(
             model="google/gemini-2.5-flash",
+            max_tokens=2000, # 🔥 에러 방지를 위한 토큰 수 제한
             messages=[{"role": "user", "content": prompt_text}]
         )
         return response.choices[0].message.content
@@ -367,7 +368,6 @@ def generate_student_record(api_key, prompt_text):
 # ===== 4. 사이드바 =====
 with st.sidebar:
     st.header("🔑 기본 설정")
-    # 🔥 UI 개선: 두 가지 발급 링크 모두 제공 및 통합 입력 안내
     api_key = st.text_input("API 키 입력 (Google 또는 OpenRouter)", type="password")
     st.caption("👇 편하신 곳에서 무료 API 키를 발급받아 입력하세요.")
     st.markdown("[🔗 Google AI Studio 키 발급 (추천)](https://aistudio.google.com/app/apikey)")
@@ -492,7 +492,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 submit = st.button("🚀 학생 맞춤형 개별 문장 생성", type="primary", use_container_width=True)
 st.divider()
 
-# ===== 6. 생성 로직 =====
+# ===== 7. 생성 로직 =====
 if submit:
     activities_data = []
     if act1_name.strip() and act1_desc.strip(): activities_data.append(f"[활동명: {act1_name.strip()}]\n- 상세 내용: {act1_desc.strip()}")
@@ -663,7 +663,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v5.1</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v5.2</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
