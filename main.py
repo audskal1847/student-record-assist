@@ -339,7 +339,7 @@ def generate_student_record(api_key, prompt_text):
             api_key=api_key,
         )
         response = client.chat.completions.create(
-            model="google/gemini-2.5-flash",
+            model="google/gemini-1.5-flash-8b",
             max_tokens=2000, # 🔥 에러 방지를 위한 토큰 수 제한
             messages=[{"role": "user", "content": prompt_text}]
         )
