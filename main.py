@@ -1,460 +1,443 @@
 import streamlit as st
 import google.generativeai as genai
-from openai import OpenAI
-import PyPDF2, pandas as pd, glob, os, re
-import base64
-import io
+import PyPDF2
+import os
+import glob
+import requests
+import re
+import json
+from collections import Counter
+from docx import Document
+from io import BytesIO
+from bs4 import BeautifulSoup
 
-try:
-    from PIL import Image
-except ImportError:
-    pass
+st.set_page_config(page_title="audskal의 학교생활기록부 분석", layout="wide")
+st.title("🏫 객관적이고 체계적인 학생부 분석")
+st.markdown("API 키에 맞는 최적의 AI 모델을 자동으로 찾아내어 생기부를 체계적으로 분석합니다.")
 
-st.set_page_config(page_title="개별화된 학생부 입력을 위한 어시스트", layout="wide")
+# ==========================================================
+# 💡 키워드 통계용 불용어(제외 단어) 사전
+# ==========================================================
+STOPWORDS = set([
+    # --- 일반 학교/수업/생활 용어 ---
+    "학교", "수업", "활동", "시간", "학생", "선생님", "교사", "담임", "학년", "학기",
+    "발표", "참여", "태도", "모습", "친구", "급우", "교실", "학급", "반장", "부반장",
+    "역할", "진행", "과정", "결과", "내용", "부분", "생각", "이해", "설명", "질문",
+    "대답", "문제", "해결", "노력", "관심", "흥미", "능력", "역량", "자세", "습관",
+    "성실", "성실성", "책임감", "리더십", "협력", "소통", "배려", "존중", "칭찬",
+    "선정", "우수", "최선", "적극", "열정", "성장", "발전", "향상", "성취", "목표",
+    "계획", "실천", "완성", "수행", "제출", "작성", "정리", "조사", "탐구", "탐색",
+    "보고서", "발표회", "토론", "토의", "모둠", "조별", "팀", "친화력", "인성",
+    "학업", "성적", "평가", "시험", "과제", "숙제", "수상", "대회", "행사", "축제",
+    "동아리", "봉사", "봉사활동", "진로", "진로활동", "자율", "자율활동", "특기",
+    "사항", "관련", "여러", "다양", "매우", "항상", "특히", "통해", "위해", "대한",
+    "가지", "경우", "때문", "이후", "이전", "당시", "현재", "미래", "자신", "본인",
+    # --- 교과명 ---
+    "국어", "영어", "수학", "과학", "사회", "역사", "한국사", "세계사", "지리",
+    "물리", "화학", "생물", "생명", "지구과학", "윤리", "도덕", "정치", "경제",
+    "법과정치", "미술", "음악", "체육", "기술", "가정", "정보", "한문", "제2외국어",
+    "문학", "독서", "화법", "작문", "언어", "매체", "확률", "통계", "미적분", "기하",
+    "물리학", "화학과", "생명과학", "통합과학", "통합사회", "탐구영역",
+])
 
-# 🔥 텍스트 입력 상태 유지를 위한 Session State 초기화 (독서 기능 추가)
-for k in ['a1n', 'a1d', 'a2n', 'a2d', 'a3n', 'a3d', 'a4n', 'a4d', 'book_title', 'book_desc']:
-    if k not in st.session_state:
-        st.session_state[k] = ""
-
-# ===== 0. 교육과정 데이터베이스 (2015 vs 2022 분리) =====
-CURRICULUM_DATA_2015 = {
-    "국어군": { "국어": ["듣기·말하기의 본질", "읽기의 과정과 방법", "글쓰기의 원리와 과정", "문학의 수용과 생산", "국어의 규범과 변천"], "화법과 작문": ["화법과 작문의 본질/원리", "정보 전달", "설득", "자기 표현과 사회적 상호작용"], "독서": ["독서의 본질", "독서의 방법", "독서의 분야", "독서의 태도", "비판적/추론적 읽기"], "언어와 매체": ["음운과 단어", "문장과 담화", "국어사", "매체의 소통 방식", "매체 자료의 수용과 생산"], "문학": ["문학의 본질", "문학의 갈래와 역사", "문학과 삶", "문학의 인접 분야", "작품의 맥락"] },
-    "수학군": { "수학": ["다항식", "방정식과 부등식", "도형의 방정식", "집합과 명제", "함수와 그래프", "경우의 수"], "수학Ⅰ": ["지수함수와 로그함수", "삼각함수", "수열"], "수학Ⅱ": ["함수의 극한과 연속", "미분", "적분"], "미적분": ["수열의 극한", "미분법", "적분법"], "확률과 통계": ["경우의 수", "확률", "통계"], "기하": ["이차곡선", "평면벡터", "공간도형과 공간좌표"] },
-    "영어군": { "영어": ["주제·요지 파악", "세부 정보 파악", "논리적 관계 파악", "맥락 추론"], "영어 회화": ["사실적/추론적 이해", "종합적 이해", "표현 및 전달"], "영어Ⅰ": ["맥락/주제 파악", "세부 정보 파악", "함축 의미 추론"], "영어 독해와 작문": ["글의 구조와 논리", "다양한 목적의 글쓰기"] },
-    "사회군": { "통합사회": ["인간, 사회, 환경과 행복", "자연환경과 인간", "시장 경제와 금융", "문화와 다양성"], "한국지리": ["국토 인식과 지리 정보", "지형 환경과 생태계", "거주 공간의 변화"], "사회·문화": ["사회·문화 현상의 탐구", "개인과 사회 구조", "현대의 사회 변동"], "생활과 윤리": ["생명과 윤리", "사회와 윤리", "과학과 윤리", "평화와 공존의 윤리"] },
-    "과학군": { "통합과학": ["물질의 규칙성", "시스템과 상호작용", "변화와 다양성", "환경과 에너지"], "물리학Ⅰ": ["힘과 운동", "열과 에너지", "전기와 자기", "파동과 정보 통신"], "화학Ⅰ": ["원자의 세계", "화학 결합과 분자의 세계", "역동적인 화학 반응"], "생명과학Ⅰ": ["사람의 물질대사", "항상성과 몸의 조절", "방어 작용", "유전"], "지구과학Ⅰ": ["고체 지구", "대기와 해양", "우주"] },
-    "기타(생활/교양/예체능)": { "기술·가정": ["인간 발달과 가족", "기술 시스템"], "정보": ["정보 문화", "문제 해결과 프로그래밍"], "보건": ["건강의 이해", "질병 예방과 관리"], "심리학": ["심리학의 이해", "나의 이해", "타인의 이해"] }
-}
-
-CURRICULUM_DATA_2022 = {
-    "국어군": { "공통국어1/2": ["듣기·말하기의 본질", "읽기의 과정과 방법", "글쓰기의 원리와 과정", "문학의 수용과 생산"], "화법과 언어": ["화법의 본질과 원리", "국어의 구조와 역사"], "독서와 작문": ["독서의 목적과 방법", "작문의 과정과 원리"], "문학": ["문학의 수용과 생산", "한국 문학의 특질과 흐름"] },
-    "수학군": { "공통수학1/2": ["다항식", "방정식과 부등식", "도형의 방정식", "경우의 수"], "대수": ["지수함수와 로그함수", "삼각함수", "수열"], "미적분Ⅰ": ["함수의 극한과 연속", "미분", "적분"], "확률과 통계": ["경우의 수", "확률", "통계"] },
-    "영어군": { "공통영어1/2": ["일상적 의사소통", "주제·요지 파악"], "영어 의사소통": ["다양한 상황의 의사소통", "협력적 소통"], "영어 독해와 작문": ["글의 구조와 논리", "목적에 맞는 글쓰기"] },
-    "사회군": { "통합사회1/2": ["인간, 사회, 환경과 행복", "인권 보장과 헌법", "시장 경제와 금융"], "세계시민과 지리": ["세계화와 세계시민", "글로벌 환경 문제"], "사회와 문화": ["사회·문화 현상의 탐구", "문화와 일상생활"] },
-    "과학군": { "통합과학1/2": ["물질과 규칙성", "시스템과 상호작용", "환경과 에너지"], "물리학": ["힘과 운동", "파동과 정보 통신"], "화학": ["물질의 구성", "화학 반응의 세계"], "생명과학": ["생명 시스템과 조절", "생명 연속성과 다양성"], "지구과학": ["고체 지구", "대기와 해양", "우주"] },
-    "기타(생활/교양/예체능)": { "기술·가정": ["인간 발달과 가족"], "정보": ["컴퓨팅 시스템", "알고리즘과 프로그래밍"], "인공지능 기초": ["데이터와 기계학습", "인공지능의 사회적 영향"] }
-}
-
-COMPETENCIES_2015 = ["AI에게 알아서 맡기기", "자기관리 역량", "지식정보처리 역량", "창의적 사고 역량", "심미적 감성 역량", "의사소통 역량", "공동체 역량"]
-COMPETENCIES_2022 = ["AI에게 알아서 맡기기", "자기관리 역량", "지식정보처리 역량", "창의적 사고 역량", "심미적 감성 역량", "협력적 소통 역량", "공동체 역량"]
-
-# ===== 1. 보조 함수 =====
 @st.cache_data(show_spinner=False)
-def load_pdfs(pdfs):
+def load_reference_pdfs(pdf_list):
     text = ""
-    for p in pdfs:
-        with open(p, "rb") as f:
-            for page in PyPDF2.PdfReader(f).pages:
-                t = page.extract_text()
-                if t: text += t + "\n"
-    return text
-
-@st.cache_data(show_spinner=False)
-def load_excel():
-    if not os.path.exists("data.xlsx"): return None, None
-    try:
-        g = pd.read_excel("data.xlsx", sheet_name="가이드북 항목별 주요 내용")
-        v = pd.read_excel("data.xlsx", sheet_name="권장 연결 동사")
-        return g, v
-    except: return None, None
-
-def remove_numbers(text):
-    text = re.sub(r'\d+\s*(명|곳|개|편|권|건|점포|장|종|가지|회|차례|번|시간)', '다수', text)
-    text = re.sub(r'약\s*다수', '다수', text)
-    return text.strip()
-
-def clean(text, subject=""):
-    for pat in [r'\*\*(.*?)\*\*', r'\*(.*?)\*', r'__(.*?)__', r'`(.*?)`']:
-        text = re.sub(pat, r'\1', text)
-    text = re.sub(r'^#+\s*|^[\-\*\+]\s+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'[\r\n]+', ' ', text)
-    text = re.sub(r' +', ' ', text)
-    return remove_numbers(text)
-
-def byte_count(text):
-    return len(text.encode('utf-8'))
-
-# 🔥 메인 AI 통신 함수
-def generate_student_record(api_key, prompt_text, selected_model):
-    if api_key.startswith("sk-or-"):
-        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key, default_headers={"HTTP-Referer": "https://streamlit.io", "X-Title": "Assist"})
-        response = client.chat.completions.create(model=selected_model, max_tokens=2000, messages=[{"role": "user", "content": prompt_text}])
-        return response.choices[0].message.content
-    else:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        response = model.generate_content(prompt_text)
-        return response.text
-
-# 🔥 파일 OCR 및 자동 요약 함수
-def summarize_uploaded_file(file, api_key, selected_model):
-    name = file.name.lower()
-    content_text = ""
-    img_b64, img_pil = None, None
-    try:
-        if name.endswith('.txt'): content_text = file.getvalue().decode("utf-8")
-        elif name.endswith('.pdf'):
+    for pdf_file in pdf_list:
+        with open(pdf_file, "rb") as file:
             pdf_reader = PyPDF2.PdfReader(file)
             for page in pdf_reader.pages:
-                ext = page.extract_text()
-                if ext: content_text += ext + "\n"
-        elif name.endswith(('.png', '.jpg', '.jpeg')):
-            file_bytes = file.getvalue()
-            img_b64 = base64.b64encode(file_bytes).decode('utf-8')
-            if not api_key.startswith("sk-or-"): img_pil = Image.open(io.BytesIO(file_bytes))
-    except Exception as e: return f"파일 읽기 오류: {e}"
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
+    return text
 
-    sys_prompt = """다음 자료를 분석하여 생기부의 '활동 상세 내용'으로 쓸 수 있도록 3~4문장으로 완벽히 요약하세요.
-    1. 핵심 성과, 구체적 탐구 내용, 알게 된 점 추출.
-    2. 무조건 '~함', '~임' 명사형 종결어미 사용."""
+def extract_candidate_keywords(text, top_n=80):
+    """
+    생기부 원문에서 조사 및 지정 불용어를 제거하고 빈도 기반 1차 후보군 레이더 가동
+    """
+    words = re.findall(r'[가-힣]{2,}', text)
+    filtered = []
+    for w in words:
+        if w in STOPWORDS:
+            continue
+        # 한글 기본 어미 처리 및 명사 꼬리에 붙는 간이 조사 패턴 제거
+        if w.endswith(("하는", "되는", "이라", "에서", "으로", "에게", "까지", "부터", "라고", "면서", "하여", "통한")):
+            continue
+        filtered.append(w)
+    counter = Counter(filtered)
+    return counter.most_common(top_n)
 
-    if img_b64 and api_key.startswith("sk-or-"):
-        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key, default_headers={"HTTP-Referer": "https://streamlit.io", "X-Title": "Assist"})
-        response = client.chat.completions.create(model=selected_model, messages=[{"role": "user", "content": [{"type": "text", "text": sys_prompt}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}]}])
-        return response.choices[0].message.content
-    elif img_pil and not api_key.startswith("sk-or-"):
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        response = model.generate_content([sys_prompt, img_pil])
-        return response.text
-    else:
-        return generate_student_record(api_key, sys_prompt + "\n\n" + content_text[:15000], selected_model)
-
-# ===== 2. 사이드바 =====
 with st.sidebar:
     st.header("🔑 기본 설정")
-    api_key = st.text_input("API 키 입력 (Google/OpenRouter)", type="password")
-    st.markdown("[🔗 OpenRouter 키 발급](https://openrouter.ai/keys)")
-    st.divider()
     
-    model_options = {
-        "🎁 [무료] OpenAI GPT-OSS 120B": "openai/gpt-oss-120b:free",
-        "🎁 [무료] Google Gemma 4 31B": "google/gemma-4-31b-it:free",
-        "⚡ [유료] Google Gemini 1.5 Pro": "google/gemini-1.5-pro",
-        "🔥 [유료] Anthropic Claude 5 Sonnet": "anthropic/claude-sonnet-5",
-        "🧠 [유료] Anthropic Claude 4.8 Opus": "anthropic/claude-opus-4.8",
-        "🚀 [유료] DeepSeek V4 Pro": "deepseek/deepseek-v4-pro",
-        "💥 [유료] Qwen 3.7 Plus": "qwen/qwen3.7-plus",
-        "💎 [유료] Z-AI GLM 5.2": "z-ai/glm-5.2"
-    }
-    selected_model_label = st.selectbox("🤖 사용할 AI 모델 선택 (OpenRouter 전용)", list(model_options.keys()), index=2)
-    selected_model = model_options[selected_model_label]
-    st.divider()
+    api_provider = st.radio("🤖 API 제공자 선택", ["Google AI Studio", "OpenRouter"])
+    api_key = st.text_input("🔑 API 키를 입력하세요", type="password")
     
-    df_guide, df_verbs = load_excel()
-    pdf_files = glob.glob("*.pdf")
-    use_pdf = st.checkbox("✅ PDF 가이드북 로드", value=False) if pdf_files else False
-    st.divider()
-    st.info("🎯 목표: 1420~1470 바이트")
-
-# ===== 3. 메인 화면 =====
-st.title("📝 학생부 입력 어시스트")
-st.caption("선택한 교육과정과 교과 핵심 키워드를 기반으로 유기적으로 연결된 개별화 학생부 기록이 생성됩니다.")
-
-st.markdown("### 📘 **적용 교육과정 선택**")
-curriculum_version = st.radio("적용 교육과정 선택", ["2015 개정 교육과정", "2022 개정 교육과정"], horizontal=True, label_visibility="collapsed")
-current_curriculum_data = CURRICULUM_DATA_2015 if curriculum_version == "2015 개정 교육과정" else CURRICULUM_DATA_2022
-current_competencies = COMPETENCIES_2015 if curriculum_version == "2015 개정 교육과정" else COMPETENCIES_2022
-
-st.markdown("---")
-
-st.markdown("#### 1. 학생 기본 정보")
-col_b1, col_b2, col_b3 = st.columns(3)
-with col_b1: aspiration = st.text_input("🎓 진학 희망 학과/계열 ⭐", placeholder="예: 도시공학과 / 사회학과")
-with col_b2: focus = st.selectbox(f"🎯 6대 핵심 역량 ({curriculum_version})", current_competencies)
-with col_b3: extra = st.text_area("🔍 개별화 강조 포인트", placeholder="예: 탐구력, 자기주도성 강조", height=68)
-
-st.markdown("---")
-
-st.markdown("#### 2. 교과 관련 정보")
-col_s1, col_s2, col_s3 = st.columns([1, 1, 2])
-with col_s1: subject_group = st.selectbox("📚 교과군 선택", ["직접 입력"] + list(current_curriculum_data.keys()))
-with col_s2:
-    if subject_group != "직접 입력":
-        subject_dropdown = st.selectbox("📖 과목명", ["직접 입력"] + list(current_curriculum_data[subject_group].keys()))
-        subject = st.text_input("과목명 직접 입력", label_visibility="collapsed") if subject_dropdown == "직접 입력" else subject_dropdown
-    else: subject = st.text_input("📖 과목명 (직접 입력)")
-with col_s3:
-    concept_options = current_curriculum_data[subject_group][subject] if subject_group != "직접 입력" and subject in current_curriculum_data[subject_group] else []
-    selected_concepts = st.multiselect("🧠 교과 핵심 아이디어", concept_options, placeholder="핵심 개념 선택")
-    manual_keywords = st.text_input("키워드 직접 입력", placeholder="추가 키워드 작성")
-    subject_keywords = " / ".join(filter(None, [", ".join(selected_concepts), manual_keywords.strip()]))
-
-st.markdown("---")
-
-# [섹션 3] 구체적인 활동 입력 및 엑셀 일괄 업로드
-st.markdown("#### 3. 구체적인 활동 및 독서 연계 내용")
-st.caption("직접 입력, 파일 업로드(OCR 요약), 또는 **엑셀 일괄 업로드를 통한 전체 학생 자동 완성**을 지원합니다.")
-
-with st.expander("📁 엑셀 파일 업로드 및 전체 학생 일괄 자동 생성 패널 (클릭)", expanded=False):
-    st.markdown("**[💡 권장 엑셀 양식 열 제목]:** `이름`(학번/성명), `활동명1`, `내용1`, `활동명2`, `내용2` ... `도서명`, `독서활동`")
-    uploaded_excel = st.file_uploader("학생 명렬표/활동 데이터 파일 업로드", type=['xlsx', 'csv'])
-    
-    student_list = ["직접 입력 (빈칸으로 초기화)"]
-    df_students = None
-    name_col = None
-
-    if uploaded_excel:
-        try:
-            df_students = pd.read_csv(uploaded_excel) if uploaded_excel.name.endswith('.csv') else pd.read_excel(uploaded_excel)
-            for col in df_students.columns:
-                if any(x in str(col) for x in ['이름', '학번', '성명']): name_col = col; break
-            if name_col:
-                student_list.extend(df_students[name_col].astype(str).tolist())
-                st.success(f"✅ 총 {len(student_list)-1}명의 학생 데이터를 안전하게 인식했습니다.")
-            else: st.error("⚠️ 엑셀 첫 번째 행에 '이름', '학번', '성명' 중 하나의 열 제목이 있어야 합니다.")
-        except Exception as e: st.error(f"엑셀 파일 읽기 오류: {e}")
-    
-    # 기능 1: 단건 개별 불러오기
-    st.markdown("---")
-    st.markdown("#### 👤 방법 A: 학생 1명씩 선택하여 화면에 불러오기")
-    col_sel1, col_sel2 = st.columns([3, 1])
-    with col_sel1: selected_student = st.selectbox("데이터 불러올 학생 선택", student_list, label_visibility="collapsed")
-    with col_sel2:
-        if st.button("⬇️ 화면에 내용 채우기", use_container_width=True):
-            for k in ['a1n', 'a1d', 'a2n', 'a2d', 'a3n', 'a3d', 'a4n', 'a4d', 'book_title', 'book_desc']: st.session_state[k] = ""
-            if selected_student != "직접 입력 (빈칸으로 초기화)" and df_students is not None and name_col:
-                row = df_students[df_students[name_col].astype(str) == selected_student].iloc[0]
-                for col in df_students.columns:
-                    c = str(col).replace(" ", "")
-                    if pd.notna(row[col]):
-                        val = str(row[col]).strip()
-                        if '활동명1' in c: st.session_state['a1n'] = val
-                        elif '내용1' in c: st.session_state['a1d'] = val
-                        elif '활동명2' in c: st.session_state['a2n'] = val
-                        elif '내용2' in c: st.session_state['a2d'] = val
-                        elif '활동명3' in c: st.session_state['a3n'] = val
-                        elif '내용3' in c: st.session_state['a3d'] = val
-                        elif '활동명4' in c: st.session_state['a4n'] = val
-                        elif '내용4' in c: st.session_state['a4d'] = val
-                        elif '도서명' in c: st.session_state['book_title'] = val
-                        elif '독서' in c: st.session_state['book_desc'] = val
-                st.rerun()
-
-    # 🔥 기능 2: 전교생 일괄 생성 및 다운로드 (독서 및 균형 서술 로직 반영)
-    st.markdown("---")
-    st.markdown("#### 🚀 방법 B: 업로드한 엑셀 내 모든 학생 일괄 자동 생성 및 파일 다운로드")
-    
-    if st.button("🔥 엑셀 내 모든 학생 일괄 자동 완성 시작", type="secondary", use_container_width=True):
-        if not api_key: st.error("API 키를 먼저 입력해 주세요!")
-        elif df_students is None: st.error("일괄 작성을 위한 엑셀 파일을 먼저 업로드해 주세요!")
+    if api_provider == "OpenRouter":
+        or_model_type = st.radio("모델 유형 선택", ["무료 모델", "유료 모델"], horizontal=True)
+        if or_model_type == "무료 모델":
+            or_model = st.selectbox("사용할 모델 선택", [
+                "openai/gpt-oss-120b:free",
+                "google/gemma-4-31b-it:free"
+            ])
         else:
-            batch_box = st.empty()
-            progress_bar = st.progress(0)
-            total_rows = len(df_students)
-            generated_list = []
-            
-            verbs = df_verbs.to_string(index=False) if df_verbs is not None else ""
-            target_byte, target_min, target_max = 1445, 1420, 1470
-            
-            for index, row in df_students.iterrows():
-                s_name = str(row[name_col]) if name_col in row else f"{index+1}번 학생"
-                batch_box.info(f"⏳ [{index+1}/{total_rows}] '{s_name}' 학생의 세특 기록 자동 빌드 중...")
-                
-                # 데이터 유연 수집
-                b_a1n, b_a1d, b_a2n, b_a2d, b_a3n, b_a3d, b_a4n, b_a4d, b_bk, b_bd = "", "", "", "", "", "", "", "", "", ""
-                for col in df_students.columns:
-                    c = str(col).replace(" ", "")
-                    if pd.notna(row[col]):
-                        val = str(row[col]).strip()
-                        if '활동명1' in c: b_a1n = val
-                        elif '내용1' in c: b_a1d = val
-                        elif '활동명2' in c: b_a2n = val
-                        elif '내용2' in c: b_a2d = val
-                        elif '도서명' in c: b_bk = val
-                        elif '독서' in c: b_bd = val
-                
-                b_acts = []
-                if b_a1n and b_a1d: b_acts.append(f"[활동명: {b_a1n}]\n- 상세: {b_a1d}")
-                if b_a2n and b_a2d: b_acts.append(f"[활동명: {b_a2n}]\n- 상세: {b_a2d}")
-                
-                b_book_str = f"[도서명: {b_bk}]\n- 독서 연계 탐구: {b_bd}" if b_bk and b_bd else ""
-                
-                if not b_acts and not b_book_str:
-                    generated_list.append("⚠️ 입력된 활동 내역이 없어 작성이 생략되었습니다.")
-                    progress_bar.progress((index + 1) / total_rows)
-                    continue
-                    
-                b_prompt = f"""당신은 20년 경력의 교사입니다. 다음 데이터를 바탕으로 완벽한 학생부 기록 1단락을 작성하세요.
-                🚨 [가장 중요한 3대 철칙] 🚨
-                1. 균형 서술: 입력된 모든 활동(활동1, 활동2)과 독서 내용의 서술 분량을 정확히 1:1(:1) 비율로 균형 있게 배분하세요. 절대 첫 번째 활동에만 치우쳐 길게 서술하지 마세요.
-                2. 활동명/도서명 100% 필수 표기: 제공된 [활동명]과 [도서명]은 절대로 생략하거나 변형하지 말고, 원문 그대로 무조건 작은따옴표('') 안에 넣어 문장에 명시하세요. (예: '활동명'에 참여하여~)
-                3. 연결성: 교과 역량 -> 활동1 -> 활동2 -> 이를 심화한 독서 활동 -> 진로 연계 순으로 자연스럽게 이어지도록 서사 구조를 잡으세요.
-                
-                - 무조건 '~함', '~임' 명사형 종결어미 사용. 주어 생략. 한 단락 작성.
-                - 분량: 공백 포함 480~500자 (약 1450바이트) 필수 강제.
-                
-                [기본 데이터]
-                - 핵심 키워드: {subject_keywords}
-                - 진로 희망: {aspiration}
-                
-                [활동 데이터] (비중 동일하게 배분할 것)
-                {"\n".join(b_acts)}
-                
-                [독서 심화 데이터]
-                {b_book_str}"""
-                
-                try:
-                    b_raw = generate_student_record(api_key, b_prompt, selected_model)
-                    b_res = clean(b_raw.strip(), subject)
-                    b_cb = byte_count(b_res)
-                    
-                    if b_cb < target_min:
-                        b_raw = generate_student_record(api_key, f"문장이 짧습니다. 모든 활동의 [활동명]과 [도서명]('')을 명시하고 내용을 균형 있게 보강하여 1450바이트로 만드세요.\n\n[문장]\n{b_res}", selected_model)
-                        b_res = clean(b_raw.strip(), subject)
-                    
-                    if byte_count(b_res) > target_max:
-                        sents = re.split(r'(?<=[.!?])\s+', b_res)
-                        t_str = ""
-                        for s in sents:
-                            if byte_count(t_str + (" " if t_str else "") + s) <= target_max: t_str += (" " if t_str else "") + s
-                            else: break
-                        if t_str: b_res = t_str.strip()
-                        
-                    generated_list.append(b_res)
-                except Exception as b_err:
-                    generated_list.append(f"⚠️ 오류 발생: {b_err}")
-                
-                progress_bar.progress((index + 1) / total_rows)
-                
-            df_students['⚙️ 생성된_학생부_최종기록'] = generated_list
-            batch_box.success("🎉 전교생 세특 일괄 자동 완성이 성공적으로 끝났습니다!")
-            
-            towrite = io.BytesIO()
-            with pd.ExcelWriter(towrite, engine='openpyxl') as writer:
-                df_students.to_excel(writer, index=False, sheet_name='최종결과물')
-            towrite.seek(0)
-            
-            st.download_button("📥 일괄 완성된 학생부 엑셀 파일 다운로드 받기", data=towrite, file_name=f"최종본_학생부_일괄완성본.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# 개별 활동 UI 아키텍처
-col_act1, col_act2 = st.columns(2)
-
-def render_activity_ui(i, col_obj):
-    with col_obj:
-        req = "(필수)" if i == 1 else "(선택)"
-        st.markdown(f"**🔹 활동 {i} {req}**")
-        st.text_input(f"활동명 {i}", key=f"a{i}n", placeholder=f"예: 활동 {i} 주제명", label_visibility="collapsed")
-        file_i = st.file_uploader(f"📎 활동 {i} 파일 업로드", type=['pdf', 'txt', 'png', 'jpg', 'jpeg'], key=f"f{i}", label_visibility="collapsed")
-        if file_i:
-            if st.button(f"✨ 활동 {i} 파일 AI 자동 요약", key=f"b{i}", use_container_width=True):
-                if not api_key: st.error("API 키가 필요합니다!")
-                else:
-                    with st.spinner(f"파일 요약 중..."):
-                        summary = summarize_uploaded_file(file_i, api_key, selected_model)
-                        st.session_state[f'a{i}d'] = summary
-                        st.rerun()
-        st.text_area(f"활동 {i} 상세 내용", key=f"a{i}d", placeholder="내용을 쓰거나 파일을 업로드해 요약 버튼을 누르세요.", height=130, label_visibility="collapsed")
-        st.markdown("<br>", unsafe_allow_html=True)
-
-render_activity_ui(1, col_act1)
-render_activity_ui(2, col_act2)
-
-# 🔥 독서 연계 심화 활동 UI 추가
-st.markdown("---")
-st.markdown("#### 📚 독서 연계 심화 활동 (선택)")
-st.caption("활동의 연장선상에서 탐구한 도서가 있다면 기재하세요. 생성 시 유기적으로 연결됩니다.")
-col_bk1, col_bk2 = st.columns([1, 2])
-with col_bk1:
-    st.text_input("도서명", key="book_title", placeholder="예: 이기적 유전자 (리처드 도킨스)")
-with col_bk2:
-    st.text_area("독서 관련 활동 내용 및 알게 된 점", key="book_desc", placeholder="책을 읽고 느낀 점이나 심화 탐구한 내용을 적어주세요.", height=68)
-
-st.markdown("<br>", unsafe_allow_html=True)
-submit = st.button("🚀 학생 맞춤형 개별 문장 생성 (화면 단건용)", type="primary", use_container_width=True)
-st.divider()
-
-# ===== 6. 단건 생성 로직 =====
-if submit:
-    activities_data = []
-    for i in range(1, 5):
-        if st.session_state[f'a{i}n'].strip() and st.session_state[f'a{i}d'].strip():
-            activities_data.append(f"[활동명: {st.session_state[f'a{i}n'].strip()}]\n- 상세 내용: {st.session_state[f'a{i}d'].strip()}")
-            
-    book_data_str = f"[도서명: {st.session_state['book_title'].strip()}]\n- 독서 연계 탐구: {st.session_state['book_desc'].strip()}" if st.session_state['book_title'].strip() and st.session_state['book_desc'].strip() else ""
-            
-    num_activities = len(activities_data)
-    activities_str = "\n\n".join(activities_data)
-
-    if not api_key: st.error("API 키를 입력해 주세요!")
-    elif num_activities == 0 and not book_data_str: st.warning("최소 1개 이상의 활동이나 독서 내용을 입력해 주세요!")
+            or_model = st.selectbox("사용할 모델 선택", [
+                "anthropic/claude-sonnet-5",
+                "anthropic/claude-opus-4.8",
+                "google/gemini-3.5-flash",
+                "deepseek/deepseek-v4-pro",
+                "qwen/qwen3.7-plus",
+                "z-ai/glm-5.2"
+            ])
+        st.markdown("[🔗 OpenRouter API 키 발급](https://openrouter.ai/keys)")
     else:
-        box = st.empty()
+        st.info("💡 Google AI Studio는 **'gemini-3.5-flash'** 모델로 고정되어 실행됩니다.")
+        st.markdown("[👉 Google AI Studio API 키 발급](https://aistudio.google.com/app/apikey)")
+    
+    st.markdown("---")
+    st.subheader("📚 내장된 기본 평가 기준 파일")
+    pdf_files = glob.glob("*.pdf")
+    if pdf_files:
+        for f in pdf_files:
+            st.write(f"- {f}")
+    else:
+        st.error("폴더에 기준 PDF 파일이 없습니다!")
+
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.subheader("1. 학교생활기록부 데이터 입력")
+    st.info("💡 나이스(NEIS) 원본 PDF는 보안상 안 읽히는 경우가 많습니다. 가급적 아래 빈칸에 내용을 직접 긁어서 붙여넣으세요!")
+    
+    student_file = st.file_uploader("📂 학생 생기부 파일 (PDF) 업로드", type=["pdf"], key="student_upload")
+    st.markdown("**-- 또는 --**")
+    student_text_input = st.text_area("📝 생기부 내용 직접 붙여넣기 (추천)", height=250)
+
+with col2:
+    st.subheader("2. 분석 옵션 및 추가 데이터 입력")
+    teacher_context = st.text_area(
+        "💡 특이사항 및 희망 전공 (예: 생명공학과 진학 희망)", 
+        height=70
+    )
+    
+    st.markdown("**🎯 목표 대학 전형 / 전공 가이드북 (선택)**")
+    st.info("해당 대학의 가이드북을 업로드하면 평가 기준을 벤치마킹합니다. (※ 결과물에 특정 대학명은 노출되지 않습니다.)")
+    univ_guide_file = st.file_uploader("🏫 대학 가이드북 PDF 업로드", type=["pdf"], key="univ_guide_upload")
+    
+    st.markdown("**📚 맞춤형 추천 도서 참고 자료 (선택)**")
+    default_url = "https://nojaesu.com/category/DIRECTORY/%EA%B5%90%EA%B3%BC%EC%97%B0%EA%B3%84%26%EC%A0%84%EA%B3%B5%EC%A0%81%ED%95%A9%EC%84%9C%20%EA%B8%B0%EC%82%AC%20%EB%AA%A8%EC%9D%8C"
+    book_url = st.text_input("🌐 추천 도서 웹사이트 주소(URL)", value=default_url)
+    
+    submit_btn = st.button("↵ 🚀 심층 분석 시작", type="primary", use_container_width=True)
+
+st.markdown("---")
+
+def create_word_file(text, keyword_stats=None):
+    doc = Document()
+    doc.add_heading('AI 생기부 분석 결과 보고서', 0)
+    
+    if keyword_stats:
+        doc.add_heading('📊 핵심 역량 키워드 통계 (Top 10)', level=1)
+        table = doc.add_table(rows=1, cols=4)
+        table.style = 'Table Grid'
+        hdr = table.rows[0].cells
+        hdr[0].text = '순위'
+        hdr[1].text = '키워드'
+        hdr[2].text = '빈도(회)'
+        hdr[3].text = '진로/학과 연관성 및 선정 사유'
+        for item in keyword_stats:
+            row = table.add_row().cells
+            row[0].text = str(item.get("rank", ""))
+            row[1].text = str(item.get("keyword", ""))
+            row[2].text = str(item.get("count", ""))
+            row[3].text = str(item.get("reason", ""))
+        doc.add_paragraph("")
+        
+    doc.add_heading('🔬 학생부 정밀 심층 분석 내용', level=1)
+    doc.add_paragraph(text)
+    
+    file_stream = BytesIO()
+    doc.save(file_stream)
+    file_stream.seek(0)
+    return file_stream
+
+if submit_btn:
+    if not api_key:
+        st.error("왼쪽에 API 키를 먼저 입력해 주세요!")
+    elif not pdf_files:
+        st.error("기준이 될 PDF 파일이 폴더에 없습니다!")
+    elif not student_file and not student_text_input.strip():
+        st.error("학생의 생기부 파일(PDF)을 업로드하거나 텍스트를 직접 붙여넣어 주세요!")
+    else:
+        status_box = st.empty()
+        
         try:
-            box.info("🔍 화면 데이터 기준 문장 구성 중...")
-            verbs = df_verbs.to_string(index=False) if df_verbs is not None else ""
-            target_byte, target_min, target_max = 1445, 1420, 1470
+            status_box.info("⏳ [진행상황 1/6] 내장된 기본 가이드북을 학습하는 중입니다...")
+            reference_text = load_reference_pdfs(pdf_files)
             
-            prompt = f"""당신은 베테랑 교사입니다. 아래 데이터를 바탕으로 완벽한 학생부 문장을 작성해 주세요.
-            🚨 [가장 중요한 3대 철칙] 🚨
-            1. 서술 비중 1:1 유지: 입력된 각 활동과 독서 내용의 서술 비중을 동일하게 배분할 것. 특정 활동 하나만 길게 쓰지 마세요.
-            2. 활동명/도서명 명시 필수: 제공된 [활동명]과 [도서명]은 요약하거나 생략하지 말고, 원문 그대로 작은따옴표('') 안에 넣어 문장에 100% 명시하세요.
-            3. 유기적 연결: 교과 역량 -> 활동 -> 심화 독서 -> 진로 연계 순으로 인과관계가 이어지도록 서술하세요.
-            
-            - 무조건 '~함', '~임' 명사형 종결어미 사용. 주어 생략. 한 단락 작성.
-            - 분량: 공백 포함 480~500자 (약 1450바이트) 필수.
+            univ_guide_text = ""
+            if univ_guide_file:
+                status_box.info("🏫 [진행상황 2/6] 업로드된 목표 대학 가이드북의 평가 기준을 분석 중입니다...")
+                univ_pdf_reader = PyPDF2.PdfReader(univ_guide_file)
+                for page in univ_pdf_reader.pages:
+                    extracted = page.extract_text()
+                    if extracted:
+                        univ_guide_text += extracted + "\n"
+            else:
+                status_box.info("🏫 [진행상황 2/6] 목표 대학 가이드북이 생략되었습니다. 기본 범용 기준으로 진행합니다.")
 
-            [기본 데이터]
-            - 진로 희망: {aspiration}
-            - 핵심 역량: {focus}
-            - 교과 키워드: {subject_keywords}
+            status_box.info("⏳ [진행상황 3/6] 학생의 생기부 데이터를 추출하는 중입니다...")
+            student_data_text = ""
+            if student_text_input.strip():
+                student_data_text = student_text_input
+            elif student_file:
+                student_pdf_reader = PyPDF2.PdfReader(student_file)
+                for page in student_pdf_reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        student_data_text += text + "\n"
             
-            [활동 데이터]
-            {activities_str}
+            if not student_data_text.strip():
+                raise Exception("생기부에서 글씨를 읽을 수 없습니다! PDF 대신 빈칸에 직접 붙여넣어 주세요.")
             
-            [독서 연계 심화 데이터]
-            {book_data_str}
+            # --- 💡 키워드 1차 로컬 후보군 추출 작동 ---
+            status_box.info("🔠 [진행상황 4/6] 생기부에서 핵심 키워드 후보를 추출하고 불용어를 정제하는 중입니다...")
+            candidate_keywords = extract_candidate_keywords(student_data_text, top_n=80)
+            candidate_str = ", ".join([f"{w}({c})" for w, c in candidate_keywords]) if candidate_keywords else "후보 없음"
             
-            → 줄바꿈 없는 한 단락으로 본문만 출력! 활동명과 도서명을 반드시('') 명시할 것!"""
-            
-            raw_response = generate_student_record(api_key, prompt, selected_model)
-            result = clean(raw_response.strip(), subject)
-            cb = byte_count(result)
-            
-            for attempt in range(2):
-                if target_min <= cb <= target_max: break
-                if cb > target_max:
-                    adj_prompt = f"아래 문장이 깁니다. [활동명]과 [도서명]('')은 반드시 남기고, 균형을 맞추며 1450바이트로 압축하세요.\n[문장]\n{result}"
-                else:
-                    adj_prompt = f"아래 문장이 짧습니다. 모든 [활동명]과 [도서명]('')이 들어있는지 확인하고, 비중을 맞추어 길게 보강하세요.\n[백업]\n{activities_str}\n{book_data_str}\n\n[문장]\n{result}"
+            status_box.info("📚 [진행상황 5/6] 추천 도서 목록 및 상세 본문을 수집하는 중입니다...")
+            actual_book_data = ""
+            if book_url.strip():
                 try:
-                    adj_raw = generate_student_record(api_key, adj_prompt, selected_model)
-                    result = clean(adj_raw.strip(), subject)
-                    cb = byte_count(result)
-                except: pass
+                    headers = {'User-Agent': 'Mozilla/5.0'}
+                    response = requests.get(book_url.strip(), headers=headers)
+                    response.raise_for_status() 
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    actual_book_data += soup.get_text(separator=' ', strip=True) + "\n\n"
+                    
+                    base_url = "/".join(book_url.split("/")[:3])
+                    article_links = []
+                    for a in soup.find_all('a', href=True):
+                        href = a['href']
+                        if re.match(r'^/[0-9]+(\?.*)?$', href) or "/entry/" in href:
+                            full_url = base_url + href.split('?')[0]
+                            if full_url not in article_links:
+                                article_links.append(full_url)
+                    
+                    if article_links:
+                        status_box.info(f"📚 [도서 연동] {len(article_links[:10])}개의 구체적인 도서 상세 설명을 추가로 수집 중입니다...")
+                        for link in article_links[:10]:
+                            try:
+                                sub_res = requests.get(link, headers=headers, timeout=5)
+                                sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
+                                content_area = sub_soup.find('div', class_='entry-content') or sub_soup.find('div', class_='article_view') or sub_soup.body
+                                if content_area:
+                                    actual_book_data += content_area.get_text(separator=' ', strip=True) + "\n\n"
+                            except:
+                                pass
+                except Exception as e:
+                    st.warning(f"⚠️ 입력하신 링크에 접속할 수 없습니다. (오류 메시지: {e})")
             
-            if cb > target_max:
-                sentences = re.split(r'(?<=[.!?])\s+', result)
-                trimmed = ""
-                for s in sentences:
-                    if byte_count(trimmed + (" " if trimmed else "") + s) <= target_max: trimmed += (" " if trimmed else "") + s
-                    else: break
-                if trimmed: result = trimmed.strip()
-            
-            box.success(f"✅ 학생 맞춤형 개별 문장 생성이 완료되었습니다!")
-            st.subheader(f"📋 최종 생성된 학생부 기록")
-            st.text_area("결과:", value=result, height=250, label_visibility="collapsed")
-            
-            c_a, c_b, c_c, c_d = st.columns(4)
-            c_a.metric("📊 글자수", f"{len(result)}자")
-            c_b.metric("💾 바이트", f"{byte_count(result)}byte")
-            c_c.metric("🎯 목표구간", "1420~1470")
-            
-            if target_min <= byte_count(result) <= target_max: st.success("✨ 목표 범위 완벽 달성!")
-            elif byte_count(result) <= 1500: st.info("📝 나이스 한도(1500바이트) 이내입니다.")
-            else: st.error("⚠️ 한도 초과! 내용을 줄여주세요.")
-                
-        except Exception as e:
-            box.error(f"오류가 발생했습니다: {e}")
+            if actual_book_data:
+                actual_book_data = actual_book_data.replace("'쌤과 함께! 교과 연계 적합書]", "")
+                actual_book_data = actual_book_data.replace("쌤과 함께! 교과 연계 적합書", "")
+                actual_book_data = re.sub(r'[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]', '', actual_book_data)
 
-# ===== 8. 푸터 고정 =====
+            book_instruction = ""
+            if actual_book_data.strip():
+                book_instruction = "반드시 아래 제공된 [추천 도서 참고 자료]의 텍스트 안에 '실제로 존재하는 책 제목과 저자'만 추출해서 추천하세요. 자료 안에 적합한 책이 없다면 억지로 지어내지 마세요."
+            else:
+                book_instruction = "별도로 제공된 도서 목록이 없으므로, AI가 자체적으로 학습한 실존하는 전공 적합 우수 도서를 추천해 주세요. (할루시네이션 절대 금지)"
+
+            status_box.warning(f"🔍 [진행상황 6/6] {api_provider} API 인증 완료, 심층 구조적 데이터 분석을 시작합니다...")
+
+            # --- 키워드 밸리데이션 통계 전용 프롬프트 ---
+            keyword_prompt = f"""
+            당신은 대한민국 대학의 입학사정관입니다. 아래는 한 학생의 학교생활기록부 원문과 프로그램이 1차로 기계 추출한 명사형 키워드 후보 목록입니다.
+            
+            [학생 생기부 원문]
+            {student_data_text}
+            
+            [1차 자동 추출 키워드 후보 (단어(빈도) 형식)]
+            {candidate_str}
+            
+            [학생 희망 전공 계열]
+            {teacher_context if teacher_context else "지정되지 않음."}
+            
+            🚨 [키워드 최종 선정 및 순위 배정 제약조건] 🚨
+            1. 아래 카테고리에 속하는 단어는 순위 집계에서 '무조건 영구 제외'하세요.
+               - 일반 학교/수업/학급 범용어 (예: 학교, 수업, 활동, 학생, 발표, 태도, 참여, 노력, 과정, 내용 등)
+               - 교과명 및 대분류 카테고리 (예: 국어, 영어, 수학, 과학, 사회, 물리, 화학, 정보 등)
+               - 학생의 전공 적합성이나 개별 역량 평가와 전혀 무관한 기초 단순 명사
+            2. 반드시 '학생의 진로희망계열 및 대학 학과와 연관성이 밀접한 전문 지식 키워드' 또는 '학생의 학업 역량, 탐구 전문성, 구체적 주제를 효과적으로 증명할 수 있는 핵심 전공 키워드'만 엄선하세요.
+            3. 의미가 유사한 단어(예: '알고리즘', '알고리즘식')는 하나의 대표 키워드로 통합하고 빈도를 합산하여 순위를 매기세요.
+            4. 최종적으로 가장 신뢰도 높은 가치 있는 핵심 키워드를 빈도와 중요성을 종합 평가하여 정확히 10개만 선정하세요.
+
+            🚨 [출력 룰 - 포맷 절대 사수] 🚨
+            텍스트 부연 설명이나 인사말을 절대 출력하지 말고 오직 아래 양식의 유효한 JSON 배열만 완벽하게 출력하세요.
+            [
+              {{"rank": 1, "keyword": "키워드", "count": 빈도수(정수), "reason": "진로 및 역량 연관성을 20자 내외로 간결하게 기재함."}},
+              ...
+            ]
+            """
+
+            # --- 메인 심층 프롬프트 (v8.4 기준 복원 및 고정) ---
+            prompt = f"""
+            당신은 20년 경력의 대한민국 최고 수석 진학 상담 교사이자 입학사정관입니다.
+
+            [담당 교사의 특별 지시사항 및 희망 전공]
+            {teacher_context if teacher_context else "특별한 지시사항 없음."}
+            
+            [추천 도서 참고 자료 (게시물 상세 본문 포함)]
+            {actual_book_data if actual_book_data else "제공된 목록 없음."}
+
+            [기본 범용 대학 평가 기준 자료]
+            {reference_text}
+
+            [목표 대학 전형/전공 가이드북 평가 기준 (선택 사항)]
+            {univ_guide_text if univ_guide_text else "제공된 목표 대학 가이드북 없음. 기본 범용 평가 기준만 적용할 것."}
+
+            [업로드된 학생의 생기부 내용 (100% 팩트)]
+            {student_data_text}
+
+            🚨 [분석의 깊이 및 톤앤매너 (매우 중요)] 🚨
+            1. 객관적이고 현실적인 평가 (과장 금지): 학생의 역량을 지나치게 긍정적으로 포장하거나 미사여구('탁월함', '압도적', '완벽함', '뛰어남' 등)를 남발하는 것을 엄격히 금지합니다. 실제 서류평가를 진행하는 냉철하고 객관적인 입학사정관의 시각에서, 학생이 '실제로 수행한 수준'에 맞게 현실적이고 담백하게 서술하세요.
+            2. 단순 요약 금지: 단순히 생기부 내용을 요약하지 말고 '어떤 의미를 가지는지 깊이 있게 분석'하세요.
+
+            🚨 [절대 엄수 - 팩트 체크 및 소설 작성 금지 규칙!] 🚨
+            1. 학생부 팩트 기반: 업로드된 내용에 없는 과목이나 활동은 단 한 글자도 지어내지 마세요.
+            2. 🚫 [진행 중인 학년 기록 부재 지적 절대 금지!]: 최신 학년의 기록이 없는 것은 당연하므로 이를 단점으로 지적하지 마세요.
+            3. 도서 추천 규칙: {book_instruction}
+            4. 특정 대학명 노출 절대 금지: 동국대학교 등 대학 이름이 직접 등장하면 안 됩니다.
+            5. 특정 문구 출력 금지: "'쌤과 함께! 교과 연계 적합書]"와 같은 불필요한 기호는 절대 출력하지 마세요.
+
+            🚨 [절대 엄수 - 출력 형식 및 '출처 100% 일치' 규칙! (가장 중요!)] 🚨
+            1. 출처 사전 확정 및 압축: 한 문단에 들어갈 핵심 활동(출처)을 정확히 2~3개만 먼저 확정하세요. 학년과 과목은 개별 분리하세요. (예: [1, 2학년 진로] ❌ -> [1학년 진로활동, 2학년 진로활동] ⭕)
+            
+            2. 🚫 [문장별 개별 꼬리표 절대 누락 금지!]:
+               - 반드시 문단 시작 부분에 '■ 테마 요약 소제목 [출처1, 출처2]' 형태로 적으세요.
+               - 본문을 작성할 때, 학생의 활동을 언급하는 모든 문장의 끝에는 반드시 해당 활동의 개별 출처 꼬리표(예: [1학년 진로활동])를 달아야 합니다. 무단으로 나열하거나 즉흥적으로 빼먹지 마세요.
+
+            🚨 [항목별 세부 작성 양식 (반드시 지킬 것!)] 🚨
+            - 2번 항목(약점 분석): 최소 2가지 이상의 약점을 분석하세요. 약점을 지적할 때는 단순히 약점만 나열하지 말고, 반드시 학생부에 기재된 특정 활동 내용(출처 꼬리표 포함)을 먼저 구체적으로 언급한 뒤, 이를 보완하기 위한 '구체적인 후속 활동이나 심화 탐구 방안'을 명확하게 제안하세요.
+            
+            - 4번 항목(추천 도서 및 연계 활동):
+              1) 도서를 나열할 때 반드시 "■ 교과명(또는 영역명):" 이라는 굵은 소제목으로 과목/영역을 확실히 구분하여 먼저 적으세요.
+              2) 각 교과명 아래에 도서를 1번부터 차례대로 순차 번호를 매겨 나열하세요.
+              3) 도서 1개당 반드시 아래의 포맷을 무조건 지키세요.
+                 [번호]. <실제 책제목> (저자명 저) - 세부 본문 내용을 바탕으로 한 구체적인 도서 소개 및 추천 이유
+                 **연계 활동:** (반드시 줄을 바꾸고 이 굵은 제목을 달 것) 학생의 [O학년 OO과목] 내용과 매칭하여 구체적으로 어떤 심화 탐구/보고서 작성을 할 수 있는지 제안함.
+
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            🚨🚨🚨 [절대 엄수 - 섹션별 '문장 종결 어미' 분리 규칙! (오류 방지 핵심!)] 🚨🚨🚨
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            ▶ [1번, 2번, 4번, 5번 항목] → 반드시 '개조식(명사형 종결)' 사용
+               - 모든 문장의 끝을 반드시 '~함', '~임', '~됨', '~판단됨', '~필요함', '~보임', '~드러남' 등 명사형으로 종결할 것.
+               - '~합니다', '~입니다', '~됩니다', '~습니다', '~이다', '~한다' 같은 경어체/평서문 종결어미는 절대 사용 금지.
+            ▶ [3번 항목 중 '면접 예상 질문'] → 반드시 '완결된 질문 문장(의문문/평서문)' 사용
+               - 반드시 '~까?', '~는가?', '~인가?', '~설명해 보세요.', '~말해 보시오.' 형태의 완전한 문장으로 종결할 것.
+            ▶ [3번 항목 중 '추천 심화 탐구 주제'] → 명사구 또는 개조식으로 작성(무방함)
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            위의 모든 규칙과 템플릿을 완벽히 적용하여, 아래 5가지 양식에 맞추어 최종 결과물을 작성해 주세요.
+            ### 1. 전공 적합성 및 주요 경쟁력 (테마별 엄선, 객관적/현실적 분석 서술, 100% 일치하는 분리 출처, 개조식 종결)
+            ### 2. 범용 평가 기준에 비추어 볼 때 보완이 필요한 약점 (특정 활동 선 언급 후 구체적 보완책 제시, 100% 일치하는 분리 출처, 개조식 종결) ※ 부재중인 학년의 기록 부족 지적 불가!
+            ### 3. 추천 심화 탐구 주제 및 면접 예상 질문 3가지 (※ 면접 질문은 반드시 완결된 질문 문장으로 종결!)
+            ### 4. 맞춤형 추천 도서 및 연계 활동 제안 (교과명 분류, 도서명(저자) 형식, **연계 활동:** 명시적 서술 필수, 개조식 종결!)
+            ### 5. 종합 의견 및 향후 발전 방향 (※ 반드시 개조식 종결! 경어체 절대 금지!)
+            """
+
+            # ==========================================================
+            # 💡 1단계: 백구라운드 통계 데이터 분석 연동
+            # ==========================================================
+            keyword_stats = []
+            try:
+                if api_provider == "Google AI Studio":
+                    genai.configure(api_key=api_key)
+                    kw_model = genai.GenerativeModel("gemini-3.5-flash")
+                    kw_res = kw_model.generate_content(keyword_prompt)
+                    keyword_raw = kw_res.text
+                elif api_provider == "OpenRouter":
+                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                    data = {"model": or_model, "messages": [{"role": "user", "content": keyword_prompt}]}
+                    res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=180)
+                    res.raise_for_status()
+                    keyword_raw = res.json()['choices'][0]['message']['content']
+
+                json_match = re.search(r'\[.*\]', keyword_raw, re.DOTALL)
+                if json_match:
+                    keyword_stats = json.loads(json_match.group())
+            except Exception as ke:
+                st.warning(f"⚠️ AI 가치판단 통계 렌더링에 일시적 오버헤드가 발생하여 빈도순 추출 목록으로 백업합니다.")
+                keyword_stats = [
+                    {"rank": i + 1, "keyword": w, "count": c, "reason": "생기부 내 주요 출현 빈도 기반 핵심 키워드로 분류됨."}
+                    for i, (w, c) in enumerate(candidate_keywords[:10])
+                ]
+
+            # 출력 스트리밍 컨테이너 할당
+            output_container = st.empty()
+            result_text = ""
+
+            # ==========================================================
+            # 💡 2단계: 실시간 스트리밍 출력 연동 (504 에러 원천 차단)
+            # ==========================================================
+            if api_provider == "Google AI Studio":
+                genai.configure(api_key=api_key)
+                main_model = genai.GenerativeModel("gemini-3.5-flash")
+                response = main_model.generate_content(prompt, stream=True)
+                for chunk in response:
+                    if chunk.text:
+                        result_text += chunk.text
+                        output_container.markdown(result_text + " ▌")
+                output_container.markdown(result_text)
+
+            elif api_provider == "OpenRouter":
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                data = {"model": or_model, "messages": [{"role": "user", "content": prompt}]}
+                res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=180)
+                res.raise_for_status()
+                result_text = res.json()['choices'][0]['message']['content']
+                output_container.markdown(result_text)
+
+            status_box.success("✅ [분석 완료!] 대기 시간 만료 없이 안전하게 심층 입학 서류 심사가 종결되었습니다.")
+
+            # --- 화면 렌더링 세션 ---
+            if keyword_stats:
+                st.subheader("📊 핵심 역량 키워드 통계 (Top 10)")
+                st.caption("※ 기본 행정 용어, 교과목 명칭 및 단순 명사는 원천 배제하고 학생 고유의 학업 전문성 및 역량 키워드만 연산한 결과입니다.")
+                
+                table_data = []
+                for item in keyword_stats:
+                    table_data.append({
+                        "순위": item.get("rank", ""),
+                        "핵심 키워드": item.get("keyword", ""),
+                        "출현 빈도(회)": item.get("count", ""),
+                        "학과 연관성 및 선발 사유": item.get("reason", "")
+                    })
+                st.table(table_data)
+
+                try:
+                    chart_data = {str(item.get("keyword", "")): int(item.get("count", 0)) for item in keyword_stats}
+                    st.bar_chart(chart_data)
+                except Exception:
+                    pass
+
+            word_file = create_word_file(result_text, keyword_stats)
+            st.download_button(
+                label="📥 분석 결과 워드 다운로드",
+                data=word_file,
+                file_name="생기부_맞춤형_분석결과.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            
+        except Exception as e:
+            status_box.error(f"오류가 발생했습니다: {e}")
+
 st.divider()
 st.markdown("""
-<div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v5.9 (독서 연계 및 서술 밸런스 최적화본)</b><br>
-    만든이: 신선여자고등학교 김명남<br>
+<div style='text-align: center; color: gray; padding: 20px; font-size: 13px;'>
+    🏫 학교생활기록부 분석 시스템 v9.0<br>
+    만든이: <b>신선여자고등학교 김명남</b>
 </div>
 """, unsafe_allow_html=True)
