@@ -470,7 +470,7 @@ if submit:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px; font-size: 15px;'>
-    🏫 <b>학생부 입력 어시스트 시스템 v6.3 (Gemini 3.5 Pro 탑재 및 챗봇 멘트 원천 차단본)</b><br>
+    🏫 <b>학생부 입력 어시스트 시스템 v6.3</b><br>
     만든이: 신선여자고등학교 김명남<br>
 </div>
 """, unsafe_allow_html=True)
