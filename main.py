@@ -136,7 +136,6 @@ with st.sidebar:
         "🎁 [무료] OpenAI GPT-OSS 120B": "openai/gpt-oss-120b:free",
         "🎁 [무료] Google Gemma 4 31B": "google/gemma-4-31b-it:free",
         "⚡ [유료] Google Gemini 3.5 Flash": "google/gemini-3.5-flash",
-        "💎 [유료] Google Gemini 3.5 Pro": "google/gemini-3.5-pro",
         "🔥 [유료] Anthropic Claude 5 Sonnet": "anthropic/claude-sonnet-5",
         "🧠 [유료] Anthropic Claude 4.8 Opus": "anthropic/claude-opus-4.8",
         "🚀 [유료] DeepSeek V4 Pro": "deepseek/deepseek-v4-pro",
